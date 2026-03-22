@@ -1,0 +1,58 @@
+[build-system]
+requires = ["setuptools>=61"]
+build-backend = "setuptools.build_meta"
+
+[project]
+name = "acid2reaper"
+version = "0.1.0"
+description = "ACID2Reaper — first public beta (0.1): convert Sonic Foundry / Sony / MAGIX ACID projects to Cockos REAPER (.rpp)."
+readme = "README.md"
+license = "CC-BY-4.0"
+requires-python = ">=3.9"
+authors = [
+  { name = "ACID2Reaper contributors" },
+]
+keywords = ["acid", "reaper", "daw", "audio", "conversion", "rpp", "acid2reaper"]
+classifiers = [
+  "Development Status :: 4 - Beta",
+  "Environment :: MacOS X",
+  "Environment :: Win32 (MS Windows)",
+  "Environment :: X11 Applications",
+  "Intended Audience :: End Users/Desktop",
+  "Operating System :: OS Independent",
+  "Programming Language :: Python :: 3",
+  "Programming Language :: Python :: 3.9",
+  "Programming Language :: Python :: 3.10",
+  "Programming Language :: Python :: 3.11",
+  "Programming Language :: Python :: 3.12",
+  "Topic :: Multimedia :: Sound/Audio",
+]
+
+dependencies = [
+  "rpp>=0.5",
+]
+
+[project.urls]
+Homepage = "https://github.com/gorfednet/ACID2Reaper"
+Repository = "https://github.com/gorfednet/ACID2Reaper"
+Issues = "https://github.com/gorfednet/ACID2Reaper/issues"
+Changelog = "https://github.com/gorfednet/ACID2Reaper/blob/main/CHANGELOG.md"
+
+[project.scripts]
+acid2reaper = "acid2reaper.cli:main"
+acid2reaper-gui = "acid2reaper.ui.desktop:main"
+
+[tool.setuptools.packages.find]
+where = ["src"]
+
+[tool.setuptools.package-data]
+acid2reaper = ["data/*.json"]
+
+[project.optional-dependencies]
+dev = ["pytest>=7.0", "build>=1.2"]
+ole = ["olefile>=0.46"]
+pyinstaller = ["pyinstaller>=6.0", "pillow>=9.0"]
+
+[tool.pytest.ini_options]
+pythonpath = ["src"]
+testpaths = ["tests"]

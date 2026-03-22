@@ -1,0 +1,59 @@
+{
+  "schema": 1,
+  "notes": "Fingerprints from real .acd samples and public file-format notes. Offsets are relative to file start unless noted.",
+  "samples": [
+    {
+      "id": "sonic_foundry_acid3_drums_2001",
+      "source_url": "https://web.archive.org/web/20021027040332/http://www.sonicfoundry.com/acid3launch/ProjectFiles/DrumRollUpDemo.acd-zip",
+      "inner_file": "DrumRollUpDemo.acd",
+      "file_size_bytes": 7800,
+      "header_magic": "riff",
+      "header_hex_first_32": "726966662e91cf11a5d628db04c10000781e0000000000006d071ceaa3ef784c",
+      "guid_bytes_le_offset_24": "ea1c076d-efa3-4c78-9057-7f79ee252aae",
+      "verified_constants": {
+        "tempo_bpm_double_le_offset": 88,
+        "tempo_value": 120.0,
+        "sample_rate_hz_u32_le_offsets": [76, 912],
+        "sample_rate_value": 44100
+      },
+      "acid_pro_major_guess": [3],
+      "parser_family": "riff_lower_guid_shell"
+    }
+  ],
+  "families": [
+    {
+      "id": "riff_lower_guid_shell",
+      "description": "Lowercase 'riff' magic with GUID-style header (Sonic Foundry ACID 3-era demo; not standard RIFF size field).",
+      "match": {
+        "magic": "riff",
+        "guid_at_offset_24": "ea1c076d-efa3-4c78-9057-7f79ee252aae"
+      },
+      "fields": {
+        "tempo_bpm": { "encoding": "float64_le", "offset": 88 },
+        "sample_rate_hz_primary": { "encoding": "uint32_le", "offset": 76 }
+      }
+    },
+    {
+      "id": "riff_acid_standard",
+      "description": "Standard uppercase RIFF container with form type ACID (seen in public RIFF documentation for ACID projects).",
+      "match": {
+        "magic": "RIFF",
+        "form_fourcc": "ACID",
+        "require_size_coherent": true
+      },
+      "fields": {}
+    },
+    {
+      "id": "ole_compound",
+      "description": "Microsoft OLE compound file (CFBF). Some Windows-era media apps used structured storage.",
+      "match": { "magic_hex": "D0CF11E0A1B11AE1" },
+      "fields": {}
+    },
+    {
+      "id": "zip_bundle",
+      "description": "ACD-ZIP (PK zip) bundle; inner .acd may match any family above.",
+      "match": { "magic_hex": "504B0304" },
+      "fields": {}
+    }
+  ]
+}

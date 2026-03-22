@@ -1,0 +1,15 @@
+.DS_Store
+.venv/
+.pytest_cache/
+__pycache__/
+*.py[cod]
+*.egg-info/
+dist/
+build/
+*.dmg
+packaging/*.log
+*_acd_extracted/
+
+# SSH keys must live in ~/.ssh, not the repo
+id_ed25519
+id_ed25519.pub

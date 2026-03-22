@@ -1,0 +1,55 @@
+# Push a version tag (v*.*.*) to run tests, build the PyPI sdist/wheel, attach them to a
+# GitHub Release, and publish to PyPI via trusted publishing (OIDC — no long-lived token).
+# Tag naming: see RELEASING.md (e.g. v1.0.0 or v0.2.0-beta.1).
+name: Release
+
+on:
+  push:
+    tags:
+      - "v*.*.*"
+
+permissions:
+  contents: write
+  id-token: write
+
+jobs:
+  release:
+    runs-on: ubuntu-latest
+    steps:
+      - uses: actions/checkout@v4
+
+      - name: Set up Python
+        uses: actions/setup-python@v5
+        with:
+          python-version: "3.11"
+
+      - name: Install dependencies
+        run: |
+          python -m pip install --upgrade pip
+          python -m pip install ".[dev]"
+
+      - name: Verify changelog
+        run: python scripts/verify_changelog.py
+
+      - name: Run tests
+        run: python -m pytest -q
+
+      - name: Build sdist and wheel
+        run: python -m build
+
+      - name: Publish GitHub Release (assets + notes)
+        uses: softprops/action-gh-release@v2
+        with:
+          files: |
+            dist/*.tar.gz
+            dist/*.whl
+          generate_release_notes: true
+          prerelease: ${{ contains(github.ref_name, '-') }}
+        env:
+          GITHUB_TOKEN: ${{ secrets.GITHUB_TOKEN }}
+
+      - name: Publish to PyPI
+        # Trusted publishing: configure at https://pypi.org/manage/project/acid2reaper/settings/publishing/
+        # Omit this step on forks or until PyPI is configured (disable job or use TestPyPI).
+        if: github.repository == 'gorfednet/ACID2Reaper'
+        uses: pypa/gh-action-pypi-publish@release/v1
