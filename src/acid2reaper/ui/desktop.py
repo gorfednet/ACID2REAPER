@@ -2,12 +2,13 @@
 Cross-platform desktop UI built on Tkinter + ttk (standard library).
 
 Design goals:
-- **Accessible**: large default padding, system theme via ttk, keyboard focus
-  on primary actions, native file dialogs (screen readers hook into OS APIs).
-- **Scalable**: single window; layout uses grid weights so resizing distributes space.
-- **Premium feel**: calm spacing, clear hierarchy, status feedback without clutter.
+- **Accessible**: comfortable padding, ttk/system theme, keyboard access to primary
+  actions, native file dialogs (assistive tech uses the OS dialog APIs). Status text
+  carries meaning (not color alone).
+- **Scalable**: single window; grid weights let resizing give space to the log.
+- **Calm layout**: LabelFrames group related controls; hierarchy stays obvious.
 
-This module is only imported when the user runs ``--gui`` or ``acid2reaper-gui`` (ACID2Reaper).
+This module is only imported for ``--gui`` or ``acid2reaper-gui`` (ACID2Reaper).
 """
 
 from __future__ import annotations
@@ -23,8 +24,8 @@ from ..cli import convert
 from ..exceptions import Acid2ReaperError
 
 
-def _base_font() -> tuple[str, int]:
-    """Prefer a readable default size on HiDPI displays."""
+def _readable_base_font() -> tuple[str, int]:
+    """Slightly bump default text size on HiDPI displays so body copy stays legible."""
     try:
         default = tkfont.nametofont("TkDefaultFont")
         return (default.actual()["family"], max(11, int(default.actual()["size"])))
@@ -36,128 +37,166 @@ def run_app() -> int:
     """
     Show the main window and block until the user closes it.
 
-    Returns a process exit code (0 = success, 1 = error shown to user).
+    Returns a process exit code (0 = success, 1 = error surfaced to the user).
     """
-    root = tk.Tk()
-    root.title(f"{__app_name__} — {__version_label__}")
-    root.minsize(520, 320)
-    root.geometry("640x400")
+    main_window = tk.Tk()
+    main_window.title(f"{__app_name__} — {__version_label__}")
+    main_window.minsize(520, 360)
+    main_window.geometry("640x420")
 
-    family, size = _base_font()
-    style = ttk.Style()
+    font_family, font_size = _readable_base_font()
+    style = ttk.Style(main_window)
     try:
         style.theme_use(style.theme_use())
     except Exception:
         pass
-    style.configure("TButton", padding=8, font=(family, size))
-    style.configure("TLabel", font=(family, size))
-    style.configure("Header.TLabel", font=(family, size + 2, "bold"))
-    style.configure("Status.TLabel", font=(family, size - 1))
+    style.configure("TButton", padding=8, font=(font_family, font_size))
+    style.configure("TLabel", font=(font_family, font_size))
+    style.configure("Header.TLabel", font=(font_family, font_size + 2, "bold"))
+    style.configure("Status.TLabel", font=(font_family, font_size - 1))
+    default_label_fg = style.lookup("TLabel", "foreground") or ""
+    style.configure("Status.TLabel", foreground=default_label_fg)
 
-    main = ttk.Frame(root, padding=20)
-    main.grid(row=0, column=0, sticky="nsew")
-    root.columnconfigure(0, weight=1)
-    root.rowconfigure(0, weight=1)
-    main.columnconfigure(1, weight=1)
+    outer = ttk.Frame(main_window, padding=20)
+    outer.grid(row=0, column=0, sticky="nsew")
+    main_window.columnconfigure(0, weight=1)
+    main_window.rowconfigure(0, weight=1)
+    outer.columnconfigure(0, weight=1)
 
-    ttk.Label(main, text=__app_name__, style="Header.TLabel").grid(
-        row=0, column=0, columnspan=3, sticky="w", pady=(0, 16)
+    ttk.Label(outer, text=__app_name__, style="Header.TLabel").grid(
+        row=0, column=0, sticky="w", pady=(0, 8)
     )
     ttk.Label(
-        main,
+        outer,
         text=(
             f"First public beta — {__version_label__}. "
-            "Convert Sonic Foundry / Sony / MAGIX ACID projects to Cockos REAPER (.rpp)."
+            "Convert Sonic Foundry / Sony / MAGIX ACID projects to Cockos REAPER (.rpp). "
+            "All processing stays on this computer (no network use)."
         ),
         wraplength=560,
-    ).grid(row=1, column=0, columnspan=3, sticky="w", pady=(0, 20))
+    ).grid(row=1, column=0, sticky="w", pady=(0, 16))
 
-    in_path: tk.StringVar = tk.StringVar()
-    out_path: tk.StringVar = tk.StringVar()
+    acid_path_var = tk.StringVar()
+    output_path_var = tk.StringVar()
 
-    def browse_in() -> None:
-        p = filedialog.askopenfilename(
+    def pick_acid_file() -> None:
+        chosen = filedialog.askopenfilename(
             title="Open ACID project",
             filetypes=[
                 ("ACID project", "*.acd *.acd-zip *.acd-bak"),
                 ("All files", "*.*"),
             ],
         )
-        if p:
-            in_path.set(p)
-            if not out_path.get():
-                out_path.set(str(Path(p).with_suffix(".rpp")))
+        if chosen:
+            acid_path_var.set(chosen)
+            if not output_path_var.get():
+                output_path_var.set(str(Path(chosen).with_suffix(".rpp")))
 
-    def browse_out() -> None:
-        p = filedialog.asksaveasfilename(
+    def pick_output_file() -> None:
+        chosen = filedialog.asksaveasfilename(
             title="Save REAPER project",
             defaultextension=".rpp",
             filetypes=[("REAPER project", "*.rpp"), ("All files", "*.*")],
         )
-        if p:
-            out_path.set(p)
+        if chosen:
+            output_path_var.set(chosen)
 
-    ttk.Label(main, text="ACID project").grid(row=2, column=0, sticky="w")
-    ttk.Entry(main, textvariable=in_path, width=50).grid(row=2, column=1, sticky="ew", padx=8)
-    ttk.Button(main, text="Browse…", command=browse_in).grid(row=2, column=2, sticky="e")
+    files_panel = ttk.LabelFrame(outer, text="Project files", padding=(12, 10, 12, 12))
+    files_panel.grid(row=2, column=0, sticky="ew", pady=(0, 12))
+    files_panel.columnconfigure(1, weight=1)
 
-    ttk.Label(main, text="Output .rpp").grid(row=3, column=0, sticky="w", pady=(12, 0))
-    ttk.Entry(main, textvariable=out_path, width=50).grid(row=3, column=1, sticky="ew", padx=8, pady=(12, 0))
-    ttk.Button(main, text="Browse…", command=browse_out).grid(row=3, column=2, sticky="e", pady=(12, 0))
+    ttk.Label(files_panel, text="ACID project").grid(row=0, column=0, sticky="w")
+    acid_entry = ttk.Entry(files_panel, textvariable=acid_path_var, width=50, takefocus=1)
+    acid_entry.grid(row=0, column=1, sticky="ew", padx=8)
+    ttk.Button(files_panel, text="Browse…", command=pick_acid_file).grid(
+        row=0, column=2, sticky="e"
+    )
 
-    status = ttk.Label(main, text="Ready.", style="Status.TLabel", foreground="#333")
-    status.grid(row=4, column=0, columnspan=3, sticky="ew", pady=(24, 8))
+    ttk.Label(files_panel, text="Output .rpp").grid(row=1, column=0, sticky="w", pady=(12, 0))
+    output_entry = ttk.Entry(files_panel, textvariable=output_path_var, width=50, takefocus=1)
+    output_entry.grid(row=1, column=1, sticky="ew", padx=8, pady=(12, 0))
+    ttk.Button(files_panel, text="Browse…", command=pick_output_file).grid(
+        row=1, column=2, sticky="e", pady=(12, 0)
+    )
 
-    log = tk.Text(main, height=8, wrap="word", font=(family, size - 1), relief="flat", background="#f8f8f8")
-    log.grid(row=5, column=0, columnspan=3, sticky="nsew", pady=(0, 12))
-    log.insert("1.0", "Tips: choose your .acd or .acd-zip, then Convert. Output defaults next to the source file.\n")
-    log.configure(state="disabled")
-    main.rowconfigure(5, weight=1)
+    status_label = ttk.Label(
+        outer,
+        text="Status: Ready.",
+        style="Status.TLabel",
+    )
+    status_label.grid(row=3, column=0, sticky="ew", pady=(4, 8))
+
+    log_panel = ttk.LabelFrame(outer, text="Conversion log", padding=(8, 8, 8, 8))
+    log_panel.grid(row=4, column=0, sticky="nsew", pady=(0, 12))
+    log_panel.columnconfigure(0, weight=1)
+    log_panel.rowconfigure(0, weight=1)
+    outer.rowconfigure(4, weight=1)
+
+    log_background = main_window.cget("background") or style.lookup("TFrame", "background") or "#ffffff"
+    conversion_log = tk.Text(
+        log_panel,
+        height=8,
+        wrap="word",
+        font=(font_family, font_size - 1),
+        relief="flat",
+        background=log_background,
+        highlightthickness=0,
+    )
+    conversion_log.grid(row=0, column=0, sticky="nsew")
+    conversion_log.insert(
+        "1.0",
+        "Choose an .acd / .acd-zip / .acd-bak, set the output path if needed, then Convert.\n",
+    )
+    conversion_log.configure(state="disabled")
 
     exit_code = 0
 
-    def append_log(msg: str) -> None:
-        log.configure(state="normal")
-        log.insert("end", msg + "\n")
-        log.see("end")
-        log.configure(state="disabled")
+    def append_conversion_log(message: str) -> None:
+        conversion_log.configure(state="normal")
+        conversion_log.insert("end", message + "\n")
+        conversion_log.see("end")
+        conversion_log.configure(state="disabled")
 
-    def do_convert() -> None:
+    def run_conversion() -> None:
         nonlocal exit_code
-        src = in_path.get().strip()
-        dst = out_path.get().strip()
-        if not src:
+        source = acid_path_var.get().strip()
+        destination = output_path_var.get().strip()
+        if not source:
             messagebox.showwarning("Missing file", "Please choose an ACID project file.")
             return
-        status.configure(text="Converting…", foreground="#0a5")
-        root.update_idletasks()
+        status_label.configure(text="Status: Converting…")
+        main_window.update_idletasks()
         try:
-            out = convert(Path(src), Path(dst) if dst else None, extra_media_dirs=None)
-            status.configure(text="Done.", foreground="#060")
-            append_log(f"Saved: {out}")
+            written = convert(
+                Path(source),
+                Path(destination) if destination else None,
+                extra_media_dirs=None,
+            )
+            status_label.configure(text="Status: Finished — output saved.")
+            append_conversion_log(f"Saved: {written}")
             exit_code = 0
         except Acid2ReaperError as exc:
-            status.configure(text="Could not convert.", foreground="#a30")
-            append_log(str(exc))
+            status_label.configure(text="Status: Conversion failed (see log).")
+            append_conversion_log(str(exc))
             messagebox.showerror("Conversion failed", str(exc))
             exit_code = 1
         except Exception as exc:
-            status.configure(text="Unexpected error.", foreground="#a30")
-            append_log(str(exc))
+            status_label.configure(text="Status: Unexpected error (see log).")
+            append_conversion_log(str(exc))
             messagebox.showerror("Error", str(exc))
             exit_code = 1
 
-    btn_frame = ttk.Frame(main)
-    btn_frame.grid(row=6, column=0, columnspan=3, sticky="e")
-    convert_btn = ttk.Button(btn_frame, text="Convert", command=do_convert)
-    convert_btn.pack(side="right", padx=(8, 0))
-    ttk.Button(btn_frame, text="Quit", command=root.destroy).pack(side="right")
+    button_row = ttk.Frame(outer)
+    button_row.grid(row=5, column=0, sticky="e")
+    convert_button = ttk.Button(button_row, text="Convert", command=run_conversion)
+    convert_button.pack(side="right", padx=(8, 0))
+    ttk.Button(button_row, text="Quit", command=main_window.destroy).pack(side="right")
 
-    root.bind("<Return>", lambda e: do_convert())
-    root.bind("<Escape>", lambda e: root.destroy())
-    convert_btn.focus_set()
+    main_window.bind("<Return>", lambda _event: run_conversion())
+    main_window.bind("<Escape>", lambda _event: main_window.destroy())
+    convert_button.focus_set()
 
-    root.mainloop()
+    main_window.mainloop()
     return exit_code
 
 

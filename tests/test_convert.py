@@ -18,6 +18,13 @@ def test_drum_roll_acd_to_rpp(tmp_path: Path) -> None:
     text = out.read_text(encoding="utf-8")
     assert "REAPER_PROJECT" in text
     assert "Break Pattern" in text or "break pattern" in text.lower()
+    # Known demo layout: half volume, -1 semitone pitch (see acid_timeline offsets).
+    assert "VOLPAN 0.5 0 1 -1" in text
+    assert "PITCHSHIFT -1 0 0 0 0 0" in text
+    # Master bus + at least one audio track, each with FXCHAIN and routing lines.
+    assert text.count("<FXCHAIN") >= 2
+    assert "TRACKGROUP 0" in text
+    assert "CHANMODE 0" in text
     root = loads(text)
     assert root.tag == "REAPER_PROJECT"
 

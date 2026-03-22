@@ -12,8 +12,9 @@ The pipeline is deliberately split into small steps so newcomers can follow it:
 4. **Build tracks**—one track per unique audio basename, which matches many
    simple ACID loop projects (not every complex session).
 
-Anything that looks like timeline editing (automation, stretch, pitch maps) is
-out of scope until we have per-version binary specs.
+Where fingerprints and heuristics allow, we also recover **per-clip** mix data
+(volume, pan, mute, pitch in cents, time stretch, reverse, trim start). Complex
+automation envelopes are not exported yet.
 """
 
 from __future__ import annotations
@@ -24,31 +25,12 @@ import struct
 from pathlib import Path
 from typing import Iterable, List, Optional, Sequence, Tuple
 
+from .acid_routing import collect_plugin_and_bus_hints
+from .acid_timeline import apply_timeline_props_to_project, extract_clip_timeline_props
 from .binary.extract import extract_structured_fields
 from .containers import AUDIO_EXT
-from .model import AcidClip, AcidProject, AcidTrack
-
-
-def _utf16le_strings(data: bytes) -> List[Tuple[int, str]]:
-    """Extract plausible UTF-16LE ASCII runs (Windows paths and filenames)."""
-    out: List[Tuple[int, str]] = []
-    i = 0
-    n = len(data)
-    while i < n - 1:
-        b0, b1 = data[i], data[i + 1]
-        if b1 != 0 or b0 < 32 or b0 > 126:
-            i += 1
-            continue
-        start = i
-        chars: List[str] = []
-        j = i
-        while j < n - 1 and data[j + 1] == 0 and 32 <= data[j] <= 126:
-            chars.append(chr(data[j]))
-            j += 2
-        if j - start >= 8 and len(chars) >= 4:
-            out.append((start, "".join(chars)))
-        i = j if j > i else i + 1
-    return out
+from .model import AcidClip, AcidProject, AcidTrack, MasterBus
+from .string_scan import utf16le_ascii_runs
 
 
 def _ascii_audio_paths(data: bytes) -> List[Tuple[int, str]]:
@@ -161,7 +143,7 @@ def parse_acid_project(
     roots: List[Path] = list(media_roots or ())
     roots.append(project_file.parent)
 
-    u16 = _utf16le_strings(scan_blob)
+    u16 = utf16le_ascii_runs(scan_blob)
     ascii_hits = _ascii_audio_paths(scan_blob)
 
     path_strings: List[str] = []
@@ -219,18 +201,37 @@ def parse_acid_project(
         "Converted from ACID project (binary fingerprint + heuristics).",
         "Verify: tempo, clip positions, stretch, pitch, envelopes, and FX.",
     ]
-    if structured.signature_id:
-        notes.append(f"Matched signature record: {structured.signature_id}")
-    if not tracks:
-        notes.append("No audio file references were found; try opening the project in ACID and re-saving.")
 
-    return AcidProject(
+    proj = AcidProject(
         source_path=project_file,
         tempo_bpm=tempo,
         sample_rate=sr,
+        master=MasterBus(),
         tracks=tracks,
         notes=notes,
         format_family=fp.family_id,
         format_signature_id=structured.signature_id,
         acid_pro_major_guess=fp.acid_pro_major_guess,
     )
+    hints = collect_plugin_and_bus_hints(scan_blob)
+    if hints:
+        proj.unmapped_plugin_hints.extend(hints)
+        proj.notes.append(
+            "Mixer hints (FX/busses/groups—strings only; REAPER needs FXID to load plug-ins): "
+            + "; ".join(hints[:12])
+            + ("…" if len(hints) > 12 else "")
+        )
+    tl = extract_clip_timeline_props(raw, fp, structured, scan_blob)
+    apply_timeline_props_to_project(proj, tl)
+    if tl:
+        proj.notes.append(
+            "Recovered mix/clip parameters where possible (volume, pan, mute, pitch, stretch, reverse, trim)."
+        )
+    if structured.signature_id:
+        proj.notes.append(f"Matched signature record: {structured.signature_id}")
+    if not tracks:
+        proj.notes.append(
+            "No audio file references were found; try opening the project in ACID and re-saving."
+        )
+
+    return proj
