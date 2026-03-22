@@ -53,11 +53,11 @@ Pushing a matching **tag** triggers the workflow in [`.github/workflows/release.
 
 1. On [PyPI](https://pypi.org), project **acid2reaper** → **Publishing** → **Add a new pending publisher** (or manage an existing one).
 2. **Publisher:** GitHub
-3. **Owner / repository:** `gorfednet` / `ACID2Reaper`
+3. **Owner / repository:** `gorfednet` / `ACID2REAPER`
 4. **Workflow name:** `release.yml` (file under `.github/workflows/`)
 5. **Environment name:** leave blank unless you add a named GitHub environment later.
 
-The workflow job must keep `permissions: id-token: write` (already set). The **Publish to PyPI** step is gated to `github.repository == 'gorfednet/ACID2Reaper'` so forks do not publish.
+The workflow job must keep `permissions: id-token: write` (already set). The **Publish to PyPI** step is gated to `github.repository == 'gorfednet/ACID2REAPER'` so forks do not publish.
 
 ### Optional: TestPyPI
 
@@ -75,6 +75,6 @@ git push origin main
 If the remote is missing:
 
 ```bash
-git remote add origin https://github.com/gorfednet/ACID2Reaper.git
+git remote add origin https://github.com/gorfednet/ACID2REAPER.git
 git push -u origin main
 ```

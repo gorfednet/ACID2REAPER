@@ -22,7 +22,7 @@ Git tags for GitHub should use a **`v` prefix** and semver; use **pre-release** 
 ## Development setup
 
 ```bash
-git clone https://github.com/gorfednet/ACID2Reaper.git
+git clone https://github.com/gorfednet/ACID2REAPER.git
 cd ACID2Reaper
 python3 -m venv .venv && source .venv/bin/activate
 pip install -e ".[dev]"

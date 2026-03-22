@@ -33,10 +33,10 @@ dependencies = [
 ]
 
 [project.urls]
-Homepage = "https://github.com/gorfednet/ACID2Reaper"
-Repository = "https://github.com/gorfednet/ACID2Reaper"
-Issues = "https://github.com/gorfednet/ACID2Reaper/issues"
-Changelog = "https://github.com/gorfednet/ACID2Reaper/blob/main/CHANGELOG.md"
+Homepage = "https://github.com/gorfednet/ACID2REAPER"
+Repository = "https://github.com/gorfednet/ACID2REAPER"
+Issues = "https://github.com/gorfednet/ACID2REAPER/issues"
+Changelog = "https://github.com/gorfednet/ACID2REAPER/blob/main/CHANGELOG.md"
 
 [project.scripts]
 acid2reaper = "acid2reaper.cli:main"

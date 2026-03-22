@@ -2,7 +2,7 @@
 
 **First public beta — version 0.1.** Convert **Sonic Foundry / Sony / MAGIX ACID** projects (`.acd`, `.acd-bak`, `.acd-zip`) to **Cockos REAPER** `.rpp` projects.
 
-[![CI](https://github.com/gorfednet/ACID2Reaper/actions/workflows/ci.yml/badge.svg)](https://github.com/gorfednet/ACID2Reaper/actions/workflows/ci.yml)
+[![CI](https://github.com/gorfednet/ACID2REAPER/actions/workflows/ci.yml/badge.svg)](https://github.com/gorfednet/ACID2REAPER/actions/workflows/ci.yml)
 [![License: CC BY 4.0](https://img.shields.io/badge/License-CC%20BY%204.0-lightgrey.svg)](LICENSE)
 
 ## Features
@@ -22,7 +22,7 @@ Parsing cannot guarantee 100% parity with ACID; always open the result in REAPER
 ## Install (from source)
 
 ```bash
-git clone https://github.com/gorfednet/ACID2Reaper.git
+git clone https://github.com/gorfednet/ACID2REAPER.git
 cd ACID2Reaper
 python3 -m venv .venv
 source .venv/bin/activate   # Windows: .venv\Scripts\activate

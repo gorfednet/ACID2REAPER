@@ -12,7 +12,7 @@ We aim to support the **latest release** on the `main` branch. This project is c
 
 Please **do not** open a public issue for security vulnerabilities.
 
-1. Open a **private security advisory** via GitHub (**Security → Advisories → Report a vulnerability**) on [ACID2Reaper](https://github.com/gorfednet/ACID2Reaper), or
+1. Open a **private security advisory** via GitHub (**Security → Advisories → Report a vulnerability**) on [ACID2Reaper](https://github.com/gorfednet/ACID2REAPER), or
 2. Contact the repository owners with a clear description, steps to reproduce, and impact.
 
 We will acknowledge receipt as soon as practical and coordinate disclosure.

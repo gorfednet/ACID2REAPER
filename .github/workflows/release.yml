@@ -51,5 +51,5 @@ jobs:
       - name: Publish to PyPI
         # Trusted publishing: configure at https://pypi.org/manage/project/acid2reaper/settings/publishing/
         # Omit this step on forks or until PyPI is configured (disable job or use TestPyPI).
-        if: github.repository == 'gorfednet/ACID2Reaper'
+        if: github.repository == 'gorfednet/ACID2REAPER'
         uses: pypa/gh-action-pypi-publish@release/v1
