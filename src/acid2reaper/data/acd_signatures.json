@@ -14,7 +14,12 @@
         "tempo_bpm_double_le_offset": 88,
         "tempo_value": 120.0,
         "sample_rate_hz_u32_le_offsets": [76, 912],
-        "sample_rate_value": 44100
+        "sample_rate_value": 44100,
+        "source_acid_chunk_offset": 2336,
+        "source_tempo_bpm_float32_le_offset": 2364,
+        "source_tempo_value": 139.5569610595703,
+        "source_beats_u32_le_offset": 2356,
+        "source_beats_value": 4
       },
       "acid_pro_major_guess": [3],
       "parser_family": "riff_lower_guid_shell"
@@ -55,5 +60,231 @@
       "match": { "magic_hex": "504B0304" },
       "fields": {}
     }
-  ]
+  ],
+  "wave64_layout": {
+    "family": "riff_lower_guid_shell",
+    "observed_in": "sonic_foundry_acid3_drums_2001",
+    "notes": [
+      "Chunk header is a 16-byte GUID stored little-endian (uuid bytes_le) followed by a little-endian uint64 size that includes the 24-byte header. Siblings are padded to 8-byte boundaries.",
+      "A 'list' chunk's payload opens with a 16-byte form GUID; its children follow. Several form GUIDs repeat as the GUID of their single leaf child.",
+      "Leaf payloads in the track subtree open with an 8-byte record header: uint32 = 8 + content byte count, then uint32 reserved (0 in the fixture). Observed values: 32 for a 32-byte payload, 12 for a 16-byte padded payload.",
+      "Every GUID below was read from the fixture's own bytes; no GUIDs are synthesized. 'decoded' entries are the only ones this converter interprets."
+    ],
+    "chunks": [
+      {
+        "guid": "66666972-912e-11cf-a5d6-28db04c10000",
+        "kind": "root",
+        "role": "Wave64 'riff' root container; form GUID at offset 24 identifies the ACID project.",
+        "decoded": true
+      },
+      {
+        "guid": "ea1c076d-efa3-4c78-9057-7f79ee252aae",
+        "kind": "form",
+        "role": "Root form type for the ACID project shell; used as the fingerprint key at offset 24.",
+        "decoded": true
+      },
+      {
+        "guid": "7473696c-912f-11cf-a5d6-28db04c10000",
+        "kind": "list",
+        "role": "Generic Wave64 'list' chunk; payload begins with a 16-byte form GUID.",
+        "decoded": true
+      },
+      {
+        "guid": "b28f2d5a-230f-11d2-86af-00c04f8edb8a",
+        "kind": "leaf",
+        "role": "Project record: sample rate, tempo, time signature, and PPQ.",
+        "decoded": true,
+        "fields": {
+          "sample_rate_hz": { "encoding": "uint32_le", "payload_offset": 12, "value": 44100 },
+          "tempo_bpm": { "encoding": "float64_le", "payload_offset": 24, "value": 120.0 },
+          "ppq": { "encoding": "uint32_le", "payload_offset": 44, "value": 24576 }
+        },
+        "unverified_fields": {
+          "time_signature": {
+            "encoding": "uint16_le pair",
+            "payload_offset": 40,
+            "raw_uint32_le": 262148,
+            "values": [4, 4],
+            "note": "Both halves are 4 in the only sample, so numerator/denominator order cannot be determined. The parser reads uint32 candidates at payload offsets 36 and 40, rejects them with a 1..32 plausibility gate, and falls back to 4/4."
+          }
+        }
+      },
+      {
+        "guid": "b28f2d5b-230f-11d2-86af-00c04f8edb8a",
+        "kind": "form",
+        "role": "Form of a project-level list holding a single b28f2d5d leaf.",
+        "decoded": false
+      },
+      {
+        "guid": "b28f2d5d-230f-11d2-86af-00c04f8edb8a",
+        "kind": "leaf",
+        "role": "Project-level record (256-byte payload); contents undecoded.",
+        "decoded": false
+      },
+      {
+        "guid": "a31e7934-c866-47b2-ae26-1541a2f457a1",
+        "kind": "form",
+        "role": "Form of an empty project-level list (no children in the fixture).",
+        "decoded": false
+      },
+      {
+        "guid": "220d2be4-7fd3-11d2-8718-00c04f8edb8a",
+        "kind": "form",
+        "role": "Form of a project-level list holding 220d2be2 and ff4aaa40 leaves.",
+        "decoded": false
+      },
+      {
+        "guid": "220d2be2-7fd3-11d2-8718-00c04f8edb8a",
+        "kind": "leaf",
+        "role": "Project-level record (40-byte payload) that repeats the 44100 sample rate; contents undecoded.",
+        "decoded": false
+      },
+      {
+        "guid": "ff4aaa40-61f9-11d2-86f5-00c04f8edb8a",
+        "kind": "leaf",
+        "role": "Project-level record (240-byte payload); contents undecoded.",
+        "decoded": false
+      },
+      {
+        "guid": "4d6c0747-2316-11d2-86b0-00c04f8edb8a",
+        "kind": "form",
+        "role": "Track list: each child list is one track.",
+        "decoded": true
+      },
+      {
+        "guid": "4d6c0748-2316-11d2-86b0-00c04f8edb8a",
+        "kind": "form",
+        "role": "One track; children carry the track record, cached source properties, and the event list.",
+        "decoded": true
+      },
+      {
+        "guid": "4d6c0749-2316-11d2-86b0-00c04f8edb8a",
+        "kind": "leaf_and_form",
+        "role": "As a leaf: track record carrying the UTF-16LE media file reference. As a list form: the track's event list.",
+        "decoded": true
+      },
+      {
+        "guid": "4d6c074a-2316-11d2-86b0-00c04f8edb8a",
+        "kind": "form",
+        "role": "Form of a list wrapping a single timeline event.",
+        "decoded": true
+      },
+      {
+        "guid": "168d206a-2321-11d2-86b0-00c04f8edb8a",
+        "kind": "leaf",
+        "role": "Timeline event record: start position and length in PPQ ticks.",
+        "decoded": true,
+        "fields": {
+          "position_ticks": { "encoding": "uint64_le", "payload_offset": 16 },
+          "length_ticks": { "encoding": "uint64_le", "payload_offset": 24 }
+        }
+      },
+      {
+        "guid": "5c538752-e345-4f78-83b8-551935b4c6f7",
+        "kind": "leaf_and_form",
+        "role": "Cached copy of the source media file's standard ACID 'acid' RIFF chunk, held per track. The 24 payload bytes after the 8-byte record header are byte-identical to the source WAV's own 'acid' chunk, which is how the cached loop tempo is located.",
+        "decoded": true,
+        "fields": {
+          "beats": { "encoding": "uint32_le", "payload_offset": 20, "value": 4 },
+          "source_tempo_bpm": {
+            "encoding": "float32_le",
+            "payload_offset": 28,
+            "value": 139.5569610595703
+          }
+        },
+        "unverified_fields": {
+          "flags": {
+            "encoding": "uint32_le",
+            "payload_offset": 8,
+            "value": 0,
+            "note": "Standard 'acid' chunk flag word (one-shot / root-note bits). Zero in the only sample, so no flag meaning is inferred and one-shot sources are not special-cased."
+          },
+          "time_signature": {
+            "encoding": "uint16_le pair",
+            "payload_offset": 24,
+            "values": [4, 4],
+            "note": "Both halves are 4, so numerator/denominator order is undetermined; parsed but not exported."
+          }
+        }
+      },
+      {
+        "guid": "6a4be05c-08cb-40ee-af32-4e53bb5eba5d",
+        "kind": "leaf_and_form",
+        "role": "Cached copy of the source media file's ACID 'strc' (stretch) chunk header; bytes 41000000 05000000 01000000 0a000000 appear verbatim in the source WAV's 'strc' chunk. Not interpreted by this converter.",
+        "decoded": false
+      },
+      {
+        "guid": "4fcd564d-1ee2-4846-bf54-b8a099d26513",
+        "kind": "form",
+        "role": "Form of the cached stretch-marker list (17 a3962e0e leaves in the fixture).",
+        "decoded": false
+      },
+      {
+        "guid": "a3962e0e-6d9c-4337-8df7-0f0cc7a8798e",
+        "kind": "leaf",
+        "role": "Cached stretch-marker entry; its 32-bit offset field matches slice offsets in the source WAV's 'strc' chunk. Entry count (17) does not match the source slice count (33), so the relationship is only partially understood and the data is not exported.",
+        "decoded": false
+      },
+      {
+        "guid": "69d46c26-7f0b-11d2-8717-00c04f8edb8a",
+        "kind": "form",
+        "role": "Form of a per-track list holding a single 69d46c27 leaf.",
+        "decoded": false
+      },
+      {
+        "guid": "69d46c27-7f0b-11d2-8717-00c04f8edb8a",
+        "kind": "leaf",
+        "role": "Per-track record (488-byte payload); contents undecoded.",
+        "decoded": false
+      },
+      {
+        "guid": "69d46c24-7f0b-11d2-8717-00c04f8edb8a",
+        "kind": "form",
+        "role": "Form of a per-track list holding a single 69d46c25 leaf.",
+        "decoded": false
+      },
+      {
+        "guid": "69d46c25-7f0b-11d2-8717-00c04f8edb8a",
+        "kind": "leaf",
+        "role": "Per-track record (224-byte payload); contents undecoded.",
+        "decoded": false
+      },
+      {
+        "guid": "925e14b7-b3c8-42ca-a596-f63f4a3cff81",
+        "kind": "form",
+        "role": "Form of a per-track list holding 32 e5ab1242 leaves; a plausible envelope or automation point list, unconfirmed.",
+        "decoded": false
+      },
+      {
+        "guid": "e5ab1242-3bd4-431e-9148-fb80c038eaeb",
+        "kind": "leaf",
+        "role": "Per-track 16-byte record repeated 32 times; contents undecoded and not exported as automation.",
+        "decoded": false
+      },
+      {
+        "guid": "925f94bc-525a-11d2-86dc-00c04f8edb8a",
+        "kind": "form",
+        "role": "Form of a project-level list holding a single 71234f1d leaf.",
+        "decoded": false
+      },
+      {
+        "guid": "71234f1d-5257-11d2-86dc-00c04f8edb8a",
+        "kind": "leaf",
+        "role": "Project-level record (64-byte payload); contents undecoded.",
+        "decoded": false
+      },
+      {
+        "guid": "f726f901-ccf4-11d4-883a-00b0d0223d2b",
+        "kind": "leaf_and_form",
+        "role": "Project-level list and leaf sharing one GUID (64-byte payload); contents undecoded.",
+        "decoded": false
+      },
+      {
+        "guid": "946739be-391a-4384-8785-38bda35f409a",
+        "kind": "leaf_and_form",
+        "role": "Final project-level list and leaf sharing one GUID (24-byte payload); contents undecoded.",
+        "decoded": false
+      }
+    ]
+  }
 }

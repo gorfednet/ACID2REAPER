@@ -8,13 +8,22 @@ through :func:`sanitize_rpp_file_token` so control characters cannot break parsi
 
 from __future__ import annotations
 
+import math
 from pathlib import Path
 
 from rpp import dumps
 from rpp.element import Element
 
 from .media_duration import media_length_seconds
-from .model import AcidClip, AcidProject, AcidTrack, FxSlot, MasterBus
+from .model import (
+    PLAYRATE_MAX,
+    PLAYRATE_MIN,
+    AcidClip,
+    AcidProject,
+    AcidTrack,
+    FxSlot,
+    MasterBus,
+)
 from .rpp_format import format_rpp_float
 from .security import sanitize_rpp_file_token
 
@@ -36,15 +45,19 @@ def _line(*tokens: str) -> list:
     return list(tokens)
 
 
+def _sanitized_playrate(clip: AcidClip) -> float:
+    """Positive stretch factor; zero, non-finite, and out-of-range values become 1.0."""
+    r = abs(float(clip.playrate))
+    if not math.isfinite(r) or not PLAYRATE_MIN <= r <= PLAYRATE_MAX:
+        return 1.0
+    return r
+
+
 def _item_playrate_tokens(clip: AcidClip) -> tuple[str, ...]:
     """REAPER `PLAYRATE` line: rate (negative = reverse) + seven trailing fields."""
-    r = float(clip.playrate)
+    r = _sanitized_playrate(clip)
     if clip.reverse:
-        r = -abs(r)
-    else:
-        r = abs(r)
-    if r == 0.0:
-        r = 1.0
+        r = -r
     # Second token: preserve pitch while changing rate (ACID beat-maps that way).
     return (format_rpp_float(r), "1", "0", "0", "0", "0", "0", "0")
 
@@ -166,7 +179,7 @@ def _regular_track_element(track: AcidTrack, track_index: int) -> Element:
                 _line("PITCHSHIFT", format_rpp_float(ps), "0", "0", "0", "0", "0")
             )
 
-        if abs(float(clip.playrate) - 1.0) > 1e-9 or clip.reverse:
+        if abs(_sanitized_playrate(clip) - 1.0) > 1e-9 or clip.reverse:
             it.children.append(_line("PLAYRATE", *_item_playrate_tokens(clip)))
 
         it.children.extend(

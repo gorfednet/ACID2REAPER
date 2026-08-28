@@ -1,4 +1,13 @@
-"""Sony Wave64-style GUID chunk parsing for catalogued ACID projects."""
+"""
+Sony Wave64-style GUID chunk parsing for catalogued ACID projects.
+
+Chunk roles and byte offsets are catalogued in ``data/acd_signatures.json``
+under ``wave64_layout``. They were derived from a single real project file, so
+non-4/4 time-signature field order and multi-track layouts are unverified: see
+the limitations section in the README before trusting or extending them. Fields
+that cannot be confirmed are gated on plausibility checks and fall back to
+neutral defaults rather than being guessed.
+"""
 
 from __future__ import annotations
 
@@ -16,6 +25,17 @@ TRACK_LIST_FORM_GUID = uuid.UUID("4d6c0747-2316-11d2-86b0-00c04f8edb8a")
 TRACK_FORM_GUID = uuid.UUID("4d6c0748-2316-11d2-86b0-00c04f8edb8a")
 EVENT_LIST_FORM_GUID = uuid.UUID("4d6c0749-2316-11d2-86b0-00c04f8edb8a")
 EVENT_GUID = uuid.UUID("168d206a-2321-11d2-86b0-00c04f8edb8a")
+SOURCE_ACID_GUID = uuid.UUID("5c538752-e345-4f78-83b8-551935b4c6f7")
+
+# The 5c538752 leaf wraps an eight-byte record header (uint32 record byte count,
+# uint32 reserved) around a verbatim copy of the source media file's standard
+# ACID ``acid`` RIFF chunk, so the cached loop fields keep that chunk's offsets.
+_SOURCE_ACID_RECORD_HEADER = 8
+_SOURCE_ACID_CHUNK_BYTES = 24
+_ACID_CHUNK_BEATS = 12
+_ACID_CHUNK_METER_DEN = 16
+_ACID_CHUNK_METER_NUM = 18
+_ACID_CHUNK_TEMPO = 20
 
 
 @dataclass(frozen=True)
@@ -38,9 +58,20 @@ class AcidEventTicks:
 
 
 @dataclass(frozen=True)
+class AcidSourceLoop:
+    """Loop metadata ACID cached from the source media file's own ``acid`` chunk."""
+
+    tempo_bpm: float
+    beats: Optional[int]
+    time_sig_num: Optional[int]
+    time_sig_den: Optional[int]
+
+
+@dataclass(frozen=True)
 class AcidTrackEvents:
     media_path: Optional[str]
     events: Tuple[AcidEventTicks, ...]
+    source_loop: Optional[AcidSourceLoop] = None
 
 
 @dataclass(frozen=True)
@@ -178,6 +209,37 @@ def _first_utf16_audio_path(data: bytes) -> Optional[str]:
     return best
 
 
+def _source_loop_in_track(data: bytes, track: Wave64Node) -> Optional[AcidSourceLoop]:
+    """Read a track's cached source-loop tempo from its 5c538752 leaf, if plausible."""
+
+    minimum = _SOURCE_ACID_RECORD_HEADER + _SOURCE_ACID_CHUNK_BYTES
+    for node in iter_wave64_nodes(track):
+        if node.guid != SOURCE_ACID_GUID or node.form_guid is not None:
+            continue
+        if node.payload_size < minimum:
+            continue
+        acid = node.payload_offset + _SOURCE_ACID_RECORD_HEADER
+        try:
+            record_bytes = struct.unpack_from("<I", data, node.payload_offset)[0]
+            beats = struct.unpack_from("<I", data, acid + _ACID_CHUNK_BEATS)[0]
+            sig_den = struct.unpack_from("<H", data, acid + _ACID_CHUNK_METER_DEN)[0]
+            sig_num = struct.unpack_from("<H", data, acid + _ACID_CHUNK_METER_NUM)[0]
+            tempo = struct.unpack_from("<f", data, acid + _ACID_CHUNK_TEMPO)[0]
+        except struct.error:
+            continue
+        if not minimum <= record_bytes <= node.payload_size:
+            continue
+        if not math.isfinite(tempo) or not 20.0 <= tempo <= 400.0:
+            continue
+        return AcidSourceLoop(
+            tempo_bpm=float(tempo),
+            beats=beats if 1 <= beats <= 1_000_000 else None,
+            time_sig_num=sig_num if 1 <= sig_num <= 32 else None,
+            time_sig_den=sig_den if 1 <= sig_den <= 32 else None,
+        )
+    return None
+
+
 def extract_acid_wave64_timeline(data: bytes) -> Optional[AcidWave64Timeline]:
     """Extract verified project timing and event leaves from the ACID Wave64 layout."""
 
@@ -258,7 +320,13 @@ def extract_acid_wave64_timeline(data: bytes) -> Optional[AcidWave64Timeline]:
                 if length > 0:
                     events.append(AcidEventTicks(position, length))
         if events:
-            tracks.append(AcidTrackEvents(media_path=media_path, events=tuple(events)))
+            tracks.append(
+                AcidTrackEvents(
+                    media_path=media_path,
+                    events=tuple(events),
+                    source_loop=_source_loop_in_track(data, track),
+                )
+            )
 
     if not tracks:
         return None

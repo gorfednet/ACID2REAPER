@@ -11,6 +11,11 @@ from dataclasses import dataclass, field
 from pathlib import Path
 from typing import List, Optional, Tuple
 
+# Plausible bounds for a clip stretch factor. A derived playrate outside this
+# range means a decode went wrong, so it is reset to 1.0 instead of exported.
+PLAYRATE_MIN = 0.01
+PLAYRATE_MAX = 100.0
+
 
 @dataclass
 class AcidClip:

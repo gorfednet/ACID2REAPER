@@ -4,7 +4,7 @@ build-backend = "setuptools.build_meta"
 
 [project]
 name = "acid2reaper"
-version = "0.1.2"
+version = "0.1.3"
 description = "ACID2Reaper — first public beta: convert Sonic Foundry / Sony / MAGIX ACID projects to Cockos REAPER (.rpp)."
 readme = "README.md"
 license = "CC-BY-4.0"

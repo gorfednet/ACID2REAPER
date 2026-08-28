@@ -30,7 +30,7 @@ from .acid_routing import collect_plugin_and_bus_hints
 from .binary.extract import extract_structured_fields
 from .binary.wave64 import extract_acid_wave64_timeline
 from .containers import AUDIO_EXT
-from .model import AcidClip, AcidProject, AcidTrack, MasterBus
+from .model import PLAYRATE_MAX, PLAYRATE_MIN, AcidClip, AcidProject, AcidTrack, MasterBus
 from .string_scan import utf16le_ascii_runs
 
 
@@ -81,6 +81,24 @@ def _guess_sample_rate_hz(data: bytes) -> Optional[int]:
         if v in (8000, 11025, 12000, 16000, 22050, 24000, 32000, 44100, 48000, 88200, 96000, 192000):
             return int(v)
     return None
+
+
+def _source_playrate(project_tempo: float, source_tempo: Optional[float]) -> float:
+    """
+    Stretch factor that beat-maps a source loop onto the project tempo.
+
+    ACID caches the source loop's own tempo per track, so a loop authored at
+    139.56 BPM inside a 120 BPM project plays back at 120/139.56. Missing or
+    implausible values leave the clip unstretched.
+    """
+    if source_tempo is None or not math.isfinite(source_tempo) or source_tempo <= 0.0:
+        return 1.0
+    if not math.isfinite(project_tempo) or project_tempo <= 0.0:
+        return 1.0
+    rate = project_tempo / source_tempo
+    if not PLAYRATE_MIN <= rate <= PLAYRATE_MAX:
+        return 1.0
+    return rate
 
 
 def _dedupe_preserve(seq: Sequence[str]) -> List[str]:
@@ -215,12 +233,17 @@ def parse_acid_project(
             else:
                 resolved = fallback_media
             name = resolved.stem or f"Track {idx + 1}"
+            source_loop = event_track.source_loop
+            playrate = _source_playrate(
+                tempo, source_loop.tempo_bpm if source_loop is not None else None
+            )
             clips = [
                 AcidClip(
                     path=resolved,
                     position_sec=event.position_ticks * seconds_per_tick,
                     length_sec=event.length_ticks * seconds_per_tick,
                     name=name,
+                    playrate=playrate,
                 )
                 for event in event_track.events
             ]
@@ -232,6 +255,14 @@ def parse_acid_project(
             clip = AcidClip(path=resolved, position_sec=0.0, name=name)
             tracks.append(AcidTrack(name=name, clips=[clip]))
 
+    source_tempos = sorted(
+        {
+            track.source_loop.tempo_bpm
+            for track in (wave64_timeline.tracks if wave64_timeline is not None else ())
+            if track.source_loop is not None
+        }
+    )
+
     notes: List[str] = [
         f"Format family: {fp.family_id}"
         + (f" (ACID Pro ~{fp.acid_pro_major_guess})" if fp.acid_pro_major_guess else ""),
@@ -241,8 +272,17 @@ def parse_acid_project(
             if wave64_timeline is not None
             else "WARNING: event layout is not catalogued for this format; media references start at 0:00."
         ),
-        "Verify: tempo, clip positions, stretch, pitch, envelopes, and FX.",
     ]
+    if wave64_timeline is not None:
+        notes.append(
+            (
+                "Clip stretch (PLAYRATE, pitch preserved) derived from cached source "
+                "loop tempo: " + ", ".join(f"{bpm:g} BPM" for bpm in source_tempos[:8])
+            )
+            if source_tempos
+            else "No cached source loop tempo found; clip stretch left at 1.0."
+        )
+    notes.append("Verify: tempo, clip positions, stretch, pitch, envelopes, and FX.")
 
     proj = AcidProject(
         source_path=project_file,
