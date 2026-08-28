@@ -28,7 +28,7 @@ Outputs:
 
 **Code signing / notarization:** For public distribution outside your machine, sign the `.app` with your Apple Developer ID and staple a notarization ticket (Apple documentation). The scripts here do not run `codesign`.
 
-**Icons:** With `pip install ".[pyinstaller]"` (includes Pillow), the spec embeds `assets/acid2reaper_logo.png` into the `.app` automatically. For a hand-tuned Dock icon, build a `.icns` (see `assets/README.md`) and replace the `icon=` path in `packaging/pyinstaller.spec`.
+**Icon:** The spec embeds the multi-resolution `assets/acid2reaper.icns` in the app bundle.
 
 If `codesign` warns about “resource fork” when building, clear extended attributes: `xattr -cr dist/ACID2Reaper.app`, then sign or rebuild.
 
@@ -48,7 +48,7 @@ Outputs:
 
 To ship a **single** `.exe` only, add a second PyInstaller invocation with `EXE(..., onefile=True)` or use **Inno Setup** / **WiX** to build a classic installer that copies the folder.
 
-**Icon:** Prefer a multi-size `.ico` derived from `assets/acid2reaper_logo.png` for the Windows executable properties dialog.
+**Icon:** The spec embeds the multi-resolution `assets/acid2reaper.ico` in the executable.
 
 ## Linux — tarball
 

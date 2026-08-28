@@ -57,7 +57,8 @@ hiddenimports = [
     "tkinter.font",
 ]
 
-icon_path = assets / "acid2reaper_logo.png"
+macos_icon_path = assets / "acid2reaper.icns"
+windows_icon_path = assets / "acid2reaper.ico"
 
 a = Analysis(
     [str(packaging_dir / "launcher_gui.py")],
@@ -90,6 +91,7 @@ gui_exe = EXE(
     target_arch=None,
     codesign_identity=None,
     entitlements_file=None,
+    icon=str(windows_icon_path) if sys.platform == "win32" and windows_icon_path.is_file() else None,
 )
 
 coll = COLLECT(
@@ -107,7 +109,7 @@ if sys.platform == "darwin":
     app = BUNDLE(
         coll,
         name="ACID2Reaper.app",
-        icon=str(icon_path) if icon_path.is_file() else None,
+        icon=str(macos_icon_path) if macos_icon_path.is_file() else None,
         bundle_identifier="com.acid2reaper.gui",
         info_plist={
             "CFBundleName": "ACID2Reaper",

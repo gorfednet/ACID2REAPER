@@ -3,18 +3,19 @@ Turn raw ACID project bytes into our neutral :class:`AcidProject` model (**ACID2
 
 The pipeline is deliberately split into small steps so newcomers can follow it:
 
-1. **Fingerprint** the binary (:mod:`acid2reaper.binary.extract`) to pull tempo /
+1. **Parse** the GUID-chunked Wave64 tree when the catalogued ACID layout is
+   present, including project timing and event positions.
+2. **Fingerprint** other binaries (:mod:`acid2reaper.binary.extract`) to pull tempo /
    sample rate when we recognize the layout.
-2. **Scan** for path-like strings (UTF-16 Windows paths are common; ASCII paths
+3. **Scan** for path-like strings (UTF-16 Windows paths are common; ASCII paths
    appear in some builds).
-3. **Resolve** each string to a real filesystem path next to the project or
+4. **Resolve** each string to a real filesystem path next to the project or
    under optional media folders.
-4. **Build tracks**—one track per unique audio basename, which matches many
+5. **Build tracks**—one track per unique audio basename, which matches many
    simple ACID loop projects (not every complex session).
 
-Where fingerprints and heuristics allow, we also recover **per-clip** mix data
-(volume, pan, mute, pitch in cents, time stretch, reverse, trim start). Complex
-automation envelopes are not exported yet.
+Undecoded fields are deliberately left at neutral defaults. Complex automation
+envelopes and unverified mix/edit parameters are not exported.
 """
 
 from __future__ import annotations
@@ -26,8 +27,8 @@ from pathlib import Path
 from typing import Iterable, List, Optional, Sequence, Tuple
 
 from .acid_routing import collect_plugin_and_bus_hints
-from .acid_timeline import apply_timeline_props_to_project, extract_clip_timeline_props
 from .binary.extract import extract_structured_fields
+from .binary.wave64 import extract_acid_wave64_timeline
 from .containers import AUDIO_EXT
 from .model import AcidClip, AcidProject, AcidTrack, MasterBus
 from .string_scan import utf16le_ascii_runs
@@ -102,6 +103,9 @@ def _resolve_clip_path(
     """
     Map a path string from the ACID file to a filesystem path.
     Prefer existing files under media_roots or relative to the project dir.
+
+    Unresolved basenames are anchored to the project directory (never the
+    process CWD), so REAPER ``FILE`` tokens stay next to the ``.acd``.
     """
     p = Path(raw)
     if p.is_absolute() and p.exists():
@@ -120,7 +124,11 @@ def _resolve_clip_path(
     here = project_file.parent / name
     if here.exists():
         return here
-    return Path(raw)
+    # Keep a project-relative path even when the media file is missing so
+    # sanitize_rpp_file_token does not resolve a bare basename against CWD.
+    if p.is_absolute():
+        return p
+    return project_file.parent / name
 
 
 def parse_acid_project(
@@ -131,9 +139,9 @@ def parse_acid_project(
     """
     Parse ACID project bytes (classic .acd / .acd-bak, or inner file from ACD-ZIP).
 
-    Uses version fingerprints from `acd_signatures.json` when a file matches a
-    catalogued sample, then falls back to heuristics. Timeline positions, pitch,
-    stretch, and FX are not fully recoverable for most variants.
+    Uses the catalogued Wave64 ACID layout for event timing, then version
+    fingerprints from `acd_signatures.json` and conservative heuristics for
+    formats whose event structure is still unknown.
     """
     fp, structured = extract_structured_fields(raw)
     scan_blob = raw
@@ -185,26 +193,70 @@ def parse_acid_project(
         ):
             by_base[base] = (path_str, resolved)
 
-    # One track per referenced media file (typical ACID layout for loops).
-    tracks: List[AcidTrack] = []
-    for idx, (_ps, resolved) in enumerate(by_base.values()):
-        name = resolved.stem or f"Track {idx + 1}"
-        clip = AcidClip(path=resolved, position_sec=0.0, name=name)
-        tracks.append(AcidTrack(name=name, clips=[clip]))
+    wave64_timeline = extract_acid_wave64_timeline(raw)
+    tempo = (
+        wave64_timeline.tempo_bpm
+        if wave64_timeline is not None
+        else structured.tempo_bpm or _guess_tempo_bpm(raw) or 120.0
+    )
+    sr = (
+        wave64_timeline.sample_rate_hz
+        if wave64_timeline is not None and wave64_timeline.sample_rate_hz
+        else structured.sample_rate_hz or _guess_sample_rate_hz(raw)
+    )
 
-    tempo = structured.tempo_bpm or _guess_tempo_bpm(raw) or 120.0
-    sr = structured.sample_rate_hz or _guess_sample_rate_hz(raw)
+    tracks: List[AcidTrack] = []
+    if wave64_timeline is not None:
+        seconds_per_tick = 60.0 / (tempo * wave64_timeline.ppq)
+        fallback_media = next(iter(by_base.values()), (None, project_file.parent / "missing.wav"))[1]
+        for idx, event_track in enumerate(wave64_timeline.tracks):
+            if event_track.media_path:
+                resolved = _resolve_clip_path(event_track.media_path, project_file, roots)
+            else:
+                resolved = fallback_media
+            name = resolved.stem or f"Track {idx + 1}"
+            clips = [
+                AcidClip(
+                    path=resolved,
+                    position_sec=event.position_ticks * seconds_per_tick,
+                    length_sec=event.length_ticks * seconds_per_tick,
+                    name=name,
+                )
+                for event in event_track.events
+            ]
+            tracks.append(AcidTrack(name=name, clips=clips))
+    else:
+        # Fallback for uncatalogued variants: one neutral clip per media reference.
+        for idx, (_ps, resolved) in enumerate(by_base.values()):
+            name = resolved.stem or f"Track {idx + 1}"
+            clip = AcidClip(path=resolved, position_sec=0.0, name=name)
+            tracks.append(AcidTrack(name=name, clips=[clip]))
 
     notes: List[str] = [
         f"Format family: {fp.family_id}"
         + (f" (ACID Pro ~{fp.acid_pro_major_guess})" if fp.acid_pro_major_guess else ""),
         "Converted from ACID project (binary fingerprint + heuristics).",
+        (
+            "Timeline positions and lengths extracted from catalogued Wave64 ACID events."
+            if wave64_timeline is not None
+            else "WARNING: event layout is not catalogued for this format; media references start at 0:00."
+        ),
         "Verify: tempo, clip positions, stretch, pitch, envelopes, and FX.",
     ]
 
     proj = AcidProject(
         source_path=project_file,
         tempo_bpm=tempo,
+        time_sig_num=(
+            wave64_timeline.time_sig_num
+            if wave64_timeline is not None and wave64_timeline.time_sig_num
+            else 4
+        ),
+        time_sig_den=(
+            wave64_timeline.time_sig_den
+            if wave64_timeline is not None and wave64_timeline.time_sig_den
+            else 4
+        ),
         sample_rate=sr,
         master=MasterBus(),
         tracks=tracks,
@@ -221,17 +273,24 @@ def parse_acid_project(
             + "; ".join(hints[:12])
             + ("…" if len(hints) > 12 else "")
         )
-    tl = extract_clip_timeline_props(raw, fp, structured, scan_blob)
-    apply_timeline_props_to_project(proj, tl)
-    if tl:
-        proj.notes.append(
-            "Recovered mix/clip parameters where possible (volume, pan, mute, pitch, stretch, reverse, trim)."
-        )
     if structured.signature_id:
         proj.notes.append(f"Matched signature record: {structured.signature_id}")
     if not tracks:
         proj.notes.append(
             "No audio file references were found; try opening the project in ACID and re-saving."
+        )
+    missing = [
+        str(clip.path)
+        for track in tracks
+        for clip in track.clips
+        if not clip.path.exists()
+    ]
+    if missing:
+        proj.notes.append(
+            "WARNING: media not found on disk (FILE paths are still project-relative; "
+            "pass --media-dir or place WAV/AIFF next to the .acd): "
+            + "; ".join(missing[:8])
+            + ("…" if len(missing) > 8 else "")
         )
 
     return proj
