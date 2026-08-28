@@ -13,14 +13,48 @@
 - **Safety limits** on file and ZIP sizes, path validation, and sanitized paths in exported RPP.
 - **PyInstaller** recipes for **macOS** (`.app` / `.dmg`), **Windows** (folder + `ACID2Reaper.exe`), and **Linux** (tarball).
 
-Parsing cannot guarantee 100% parity with ACID; always open the result in REAPER and verify tempo, media, and automation.
+Parsing cannot guarantee 100% parity with ACID; always open the result in REAPER and verify tempo, stretch, media, and automation.
 
 For the catalogued Sony Wave64-style ACID layout, the converter reads project
-tempo/PPQ and emits each event at its decoded timeline position and length.
-Uncatalogued container variants still fall back to neutral media references at
-`0:00`. Time-signature field order beyond verified 4/4 projects, clip gain,
-pitch/stretch, envelopes, fades, and automation remain unverified and are not
-invented from undecoded fields.
+tempo/PPQ and emits each event at its decoded timeline position and length. It
+also reads the per-track cached source loop tempo and exports it as a REAPER
+`PLAYRATE` (pitch preserved), so loops authored at a different tempo than the
+project are beat-mapped instead of playing at their raw speed. Uncatalogued
+container variants still fall back to neutral media references at `0:00`.
+
+## Format coverage and known limitations
+
+Everything decoded here was derived from **one** real project file
+(`tests/fixtures/DrumRollUpDemo.acd`, a Sonic Foundry ACID 3-era demo). The GUID
+chunk roles and byte offsets are catalogued in
+[`src/acid2reaper/data/acd_signatures.json`](src/acid2reaper/data/acd_signatures.json)
+under `wave64_layout`, which marks each chunk as decoded or undecoded.
+
+Because the sample size is one, the following are **unverified** and must not be
+assumed correct:
+
+- **Non-4/4 time signatures.** The project record stores the signature as a
+  `uint16` pair, but both halves are `4` in the only sample, so the
+  numerator/denominator **field order is undetermined**. The parser gates these
+  fields on a plausibility check and falls back to 4/4 rather than guessing, so a
+  genuine 3/4 or 6/8 project may be exported as 4/4.
+- **Multi-track projects.** The fixture has a single track with a single media
+  source. Track ordering, per-track mixer state, and how multiple sources are
+  associated with one track are inferred from a one-track layout only.
+- **One-shot sources.** The cached source `acid` chunk has a flag word that in
+  the standard chunk marks one-shots (which should not be stretched). It is `0`
+  in the only sample, so no flag meaning is inferred and every source with a
+  plausible cached tempo is beat-mapped. A one-shot could therefore receive a
+  `PLAYRATE` it should not have.
+- **Stretch markers, envelopes, and automation.** Cached `strc` slice data and
+  the repeated 16-byte per-track records are catalogued but not interpreted.
+
+Clip gain, pan, pitch, fades, and automation are likewise not invented from
+undecoded fields.
+
+If you have `.acd` files that exercise these cases — especially non-4/4 or
+multi-track projects — please attach them to an issue so the layout can be
+confirmed against more than one sample.
 
 ## Requirements
 
@@ -33,7 +67,7 @@ invented from undecoded fields.
 
 ```bash
 python3 -m pip install \
-  https://github.com/gorfednet/ACID2REAPER/releases/download/v0.1.2/acid2reaper-0.1.2-py3-none-any.whl
+  https://github.com/gorfednet/ACID2REAPER/releases/download/v0.1.3/acid2reaper-0.1.3-py3-none-any.whl
 ```
 
 On macOS, user installs often land in `~/Library/Python/3.9/bin` — put that directory on your `PATH`, or run `python3 -m acid2reaper`.
@@ -66,7 +100,7 @@ acid2reaper --gui
 
 ## Version
 
-- **Package version:** `0.1.2` (see `src/acid2reaper/_version.py`). Distributed via **GitHub Releases** (PyPI optional later).
+- **Package version:** `0.1.3` (see `src/acid2reaper/_version.py`). Distributed via **GitHub Releases** (PyPI optional later).
 - **Marketing label:** **0.1 (Beta)**.
 
 ```bash

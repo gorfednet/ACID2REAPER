@@ -5,5 +5,5 @@ This is the **first public beta** line: ``__version__`` follows PEP 440, and
 ``__version_label__`` is the human-facing label (e.g. “0.1 (Beta)”).
 """
 
-__version__ = "0.1.2"
-__version_label__ = "0.1.2 (Beta)"
+__version__ = "0.1.3"
+__version_label__ = "0.1.3 (Beta)"

@@ -82,6 +82,104 @@ def test_standalone_acd_file_token_is_project_relative(tmp_path: Path) -> None:
     assert 'FILE "Break Pattern C.WAV"' not in text
 
 
+def _playrate_lines(text: str) -> list[str]:
+    """ITEM PLAYRATE lines only (the project-level PLAYRATE has four tokens)."""
+    return [
+        line.strip()
+        for line in text.splitlines()
+        if line.strip().startswith("PLAYRATE ") and len(line.split()) == 9
+    ]
+
+
+def test_playrate_from_cached_source_tempo(tmp_path: Path) -> None:
+    """Project 120 BPM against the fixture's cached 139.557 BPM source loop."""
+    acd = FIXTURES / "DrumRollUpDemo.acd"
+    out = tmp_path / "playrate.rpp"
+    convert(acd, out)
+    text = out.read_text(encoding="utf-8")
+
+    lines = _playrate_lines(text)
+    assert len(lines) == 15
+    expected = 120.0 / 139.5569610595703
+    for line in lines:
+        tokens = line.split()
+        assert float(tokens[1]) == pytest.approx(expected, rel=1e-9)
+        # Preserve-pitch flag must stay enabled.
+        assert tokens[2] == "1"
+
+    # A stretched source still occupies its decoded event length on the timeline.
+    lengths = [float(v) for v in re.findall(r"^\s*LENGTH\s+([0-9.]+)", text, re.MULTILINE)]
+    assert lengths[0] == pytest.approx(2.0)
+    root = loads(text)
+    assert root.tag == "REAPER_PROJECT"
+
+
+def test_playrate_falls_back_to_unity_without_cached_source_tempo(tmp_path: Path) -> None:
+    """No cached source tempo means no PLAYRATE line, and timing is unchanged."""
+    raw = bytearray((FIXTURES / "DrumRollUpDemo.acd").read_bytes())
+    # Same single-byte GUID edit as tests/test_binary.py: removes the 5c538752
+    # leaf without disturbing chunk sizes.
+    raw[2312] ^= 0xFF
+    acd = tmp_path / "no_source_tempo.acd"
+    acd.write_bytes(bytes(raw))
+
+    out = tmp_path / "fallback.rpp"
+    convert(acd, out)
+    text = out.read_text(encoding="utf-8")
+
+    assert _playrate_lines(text) == []
+    assert text.count("<ITEM") == 15
+    positions = [float(v) for v in re.findall(r"^\s*POSITION\s+([0-9.]+)", text, re.MULTILINE)]
+    assert positions[0] == pytest.approx(0.0)
+    assert positions[1] == pytest.approx(2.0)
+    root = loads(text)
+    assert root.tag == "REAPER_PROJECT"
+
+
+@pytest.mark.parametrize("bad_rate", [0.0, -0.0, float("nan"), float("inf"), 1e9, 1e-9])
+def test_implausible_playrate_is_never_exported(tmp_path: Path, bad_rate: float) -> None:
+    """Zero, non-finite, and out-of-range stretch factors must not reach the RPP."""
+    from acid2reaper.export_rpp import write_rpp
+    from acid2reaper.model import AcidClip, AcidProject, AcidTrack, MasterBus
+
+    clip = AcidClip(path=tmp_path / "x.wav", position_sec=0.0, length_sec=1.0)
+    clip.playrate = bad_rate
+    project = AcidProject(
+        source_path=tmp_path / "x.acd",
+        master=MasterBus(),
+        tracks=[AcidTrack(name="x", clips=[clip])],
+    )
+    out = tmp_path / "clamped.rpp"
+    write_rpp(project, out)
+    text = out.read_text(encoding="utf-8")
+
+    assert _playrate_lines(text) == []
+    assert "nan" not in text.lower()
+    assert "inf" not in text.lower()
+    assert loads(text).tag == "REAPER_PROJECT"
+
+
+def test_reverse_clip_keeps_negative_playrate_when_rate_is_implausible(tmp_path: Path) -> None:
+    """Reverse must survive a rejected stretch factor as a negative unity rate."""
+    from acid2reaper.export_rpp import write_rpp
+    from acid2reaper.model import AcidClip, AcidProject, AcidTrack, MasterBus
+
+    clip = AcidClip(path=tmp_path / "x.wav", position_sec=0.0, length_sec=1.0)
+    clip.playrate = 0.0
+    clip.reverse = True
+    project = AcidProject(
+        source_path=tmp_path / "x.acd",
+        master=MasterBus(),
+        tracks=[AcidTrack(name="x", clips=[clip])],
+    )
+    out = tmp_path / "reverse.rpp"
+    write_rpp(project, out)
+
+    lines = _playrate_lines(out.read_text(encoding="utf-8"))
+    assert len(lines) == 1
+    assert lines[0].split()[1] == "-1"
+
+
 def test_acd_event_length_wins_over_colocated_wav_duration(tmp_path: Path) -> None:
     """A decoded event length must take precedence over full source duration."""
     import shutil
