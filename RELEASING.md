@@ -45,23 +45,25 @@ See [packaging/BUILD.md](packaging/BUILD.md). Each platform script runs `verify_
 Pushing a matching **tag** triggers the workflow in [`.github/workflows/release.yml`](.github/workflows/release.yml):
 
 1. **Tests** and **changelog** (`verify_changelog.py`) must pass.
-2. **PyPI artifacts:** `python -m build` produces the **sdist** and **wheel** (install `build` via `pip install ".[dev]"` locally).
+2. **Artifacts:** `python -m build` produces the **sdist** and **wheel**.
 3. **GitHub Release:** those files are attached and release notes are generated.
-4. **PyPI:** the same artifacts are published with **trusted publishing** (OIDC — no API token in the repo).
 
-### One-time PyPI setup (trusted publishing)
+Install from the release (macOS / Linux often need `python3 -m pip`):
 
-1. On [PyPI](https://pypi.org), project **acid2reaper** → **Publishing** → **Add a new pending publisher** (or manage an existing one).
-2. **Publisher:** GitHub
-3. **Owner / repository:** `gorfednet` / `ACID2REAPER`
-4. **Workflow name:** `release.yml` (file under `.github/workflows/`)
-5. **Environment name:** leave blank unless you add a named GitHub environment later.
+```bash
+python3 -m pip install \
+  https://github.com/gorfednet/ACID2REAPER/releases/download/v0.1.2/acid2reaper-0.1.2-py3-none-any.whl
+```
 
-The workflow job must keep `permissions: id-token: write` (already set). The **Publish to PyPI** step is gated to `github.repository == 'gorfednet/ACID2REAPER'` so forks do not publish.
+Or from the tag without a wheel URL:
 
-Create the pending publisher **before pushing a release tag**. The release workflow
-checks that GitHub can mint its PyPI OIDC token before it creates a GitHub Release,
-but only PyPI can validate that the pending-publisher fields above match.
+```bash
+python3 -m pip install "acid2reaper @ git+https://github.com/gorfednet/ACID2REAPER.git@v0.1.2"
+```
+
+### PyPI (optional, deferred)
+
+PyPI trusted publishing is **not** required for a release. When a PyPI login is available again, add a pending publisher for `gorfednet/ACID2REAPER` / `release.yml` and restore a `pypa/gh-action-pypi-publish` step (with `permissions: id-token: write`) after the build.
 
 ### Optional: TestPyPI
 
