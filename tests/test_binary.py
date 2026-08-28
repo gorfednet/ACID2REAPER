@@ -86,7 +86,7 @@ def test_source_acid_chunk_is_verbatim_copy_of_source_wav_acid_chunk() -> None:
     apply directly.
     """
     raw = (FIXTURES / "DrumRollUpDemo.acd").read_bytes()
-    wav = (FIXTURES / "DrumRollUpDemo_acd_extracted" / "Break Pattern c.WAV").read_bytes()
+    wav = (FIXTURES / "samples" / "acid3_extracted" / "Break Pattern c.WAV").read_bytes()
 
     wav_acid = None
     offset = 12

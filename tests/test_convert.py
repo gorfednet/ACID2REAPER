@@ -188,7 +188,7 @@ def test_acd_event_length_wins_over_colocated_wav_duration(tmp_path: Path) -> No
     work = tmp_path / "project"
     work.mkdir()
     shutil.copy(FIXTURES / "DrumRollUpDemo.acd", work / "DrumRollUpDemo.acd")
-    src_wav = FIXTURES / "DrumRollUpDemo_acd_extracted" / "Break Pattern c.WAV"
+    src_wav = FIXTURES / "samples" / "acid3_extracted" / "Break Pattern c.WAV"
     shutil.copy(src_wav, work / "Break Pattern c.WAV")
     with wave.open(str(work / "Break Pattern c.WAV"), "rb") as wf:
         frames = wf.getnframes()
