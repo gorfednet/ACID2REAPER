@@ -78,6 +78,7 @@ def run_app() -> int:
 
     acid_path_var = tk.StringVar()
     output_path_var = tk.StringVar()
+    media_dir_var = tk.StringVar()
 
     def pick_acid_file() -> None:
         chosen = filedialog.askopenfilename(
@@ -101,6 +102,14 @@ def run_app() -> int:
         if chosen:
             output_path_var.set(chosen)
 
+    def pick_media_dir() -> None:
+        chosen = filedialog.askdirectory(
+            title="Choose folder containing project audio",
+            mustexist=True,
+        )
+        if chosen:
+            media_dir_var.set(chosen)
+
     files_panel = ttk.LabelFrame(outer, text="Project files", padding=(12, 10, 12, 12))
     files_panel.grid(row=2, column=0, sticky="ew", pady=(0, 12))
     files_panel.columnconfigure(1, weight=1)
@@ -117,6 +126,13 @@ def run_app() -> int:
     output_entry.grid(row=1, column=1, sticky="ew", padx=8, pady=(12, 0))
     ttk.Button(files_panel, text="Browse…", command=pick_output_file).grid(
         row=1, column=2, sticky="e", pady=(12, 0)
+    )
+
+    ttk.Label(files_panel, text="Media folder").grid(row=2, column=0, sticky="w", pady=(12, 0))
+    media_entry = ttk.Entry(files_panel, textvariable=media_dir_var, width=50, takefocus=1)
+    media_entry.grid(row=2, column=1, sticky="ew", padx=8, pady=(12, 0))
+    ttk.Button(files_panel, text="Browse…", command=pick_media_dir).grid(
+        row=2, column=2, sticky="e", pady=(12, 0)
     )
 
     status_label = ttk.Label(
@@ -161,6 +177,7 @@ def run_app() -> int:
         nonlocal exit_code
         source = acid_path_var.get().strip()
         destination = output_path_var.get().strip()
+        media_dir = media_dir_var.get().strip()
         if not source:
             messagebox.showwarning("Missing file", "Please choose an ACID project file.")
             return
@@ -170,7 +187,7 @@ def run_app() -> int:
             written = convert(
                 Path(source),
                 Path(destination) if destination else None,
-                extra_media_dirs=None,
+                extra_media_dirs=[Path(media_dir)] if media_dir else None,
             )
             status_label.configure(text="Status: Finished — output saved.")
             append_conversion_log(f"Saved: {written}")

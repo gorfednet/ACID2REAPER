@@ -37,6 +37,31 @@ jobs:
       - name: Build sdist and wheel
         run: python -m build
 
+      - name: "Preflight: verify PyPI OIDC token access"
+        if: github.repository == 'gorfednet/ACID2REAPER'
+        shell: bash
+        run: |
+          set -euo pipefail
+          echo "::notice::PyPI must have a pending publisher for gorfednet/ACID2REAPER, workflow release.yml, with no environment name."
+          if [[ -z "${ACTIONS_ID_TOKEN_REQUEST_URL:-}" || -z "${ACTIONS_ID_TOKEN_REQUEST_TOKEN:-}" ]]; then
+            echo "::error::GitHub OIDC is unavailable. Keep 'permissions: id-token: write' on this workflow."
+            exit 1
+          fi
+          if ! curl --fail --silent --show-error \
+            -H "Authorization: bearer ${ACTIONS_ID_TOKEN_REQUEST_TOKEN}" \
+            "${ACTIONS_ID_TOKEN_REQUEST_URL}&audience=pypi" |
+            python -c "import json,sys; assert json.load(sys.stdin).get('value'), 'OIDC response has no token'"; then
+            echo "::error::Could not mint the PyPI OIDC token. Do not create a release tag until trusted publishing is configured."
+            exit 1
+          fi
+          echo "::notice::GitHub OIDC token minted. PyPI will now validate the pending-publisher configuration."
+
+      - name: Publish to PyPI
+        # Configure this first: https://pypi.org/manage/project/acid2reaper/settings/publishing/
+        # Pending publisher: gorfednet/ACID2REAPER, release.yml, environment left blank.
+        if: github.repository == 'gorfednet/ACID2REAPER'
+        uses: pypa/gh-action-pypi-publish@release/v1
+
       - name: Publish GitHub Release (assets + notes)
         uses: softprops/action-gh-release@v2
         with:
@@ -47,9 +72,3 @@ jobs:
           prerelease: ${{ contains(github.ref_name, '-') }}
         env:
           GITHUB_TOKEN: ${{ secrets.GITHUB_TOKEN }}
-
-      - name: Publish to PyPI
-        # Trusted publishing: configure at https://pypi.org/manage/project/acid2reaper/settings/publishing/
-        # Omit this step on forks or until PyPI is configured (disable job or use TestPyPI).
-        if: github.repository == 'gorfednet/ACID2REAPER'
-        uses: pypa/gh-action-pypi-publish@release/v1

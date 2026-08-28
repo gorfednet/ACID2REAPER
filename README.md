@@ -8,11 +8,19 @@
 ## Features
 
 - **CLI** and optional **graphical** interface (Tkinter, cross-platform).
-- **Heuristic parsing** of proprietary ACID binaries, plus **fingerprinted** layouts where catalogued.
+- **Structural timeline parsing** for the catalogued GUID-chunked Wave64 ACID
+  layout, plus conservative fingerprint/heuristic handling of other variants.
 - **Safety limits** on file and ZIP sizes, path validation, and sanitized paths in exported RPP.
 - **PyInstaller** recipes for **macOS** (`.app` / `.dmg`), **Windows** (folder + `ACID2Reaper.exe`), and **Linux** (tarball).
 
 Parsing cannot guarantee 100% parity with ACID; always open the result in REAPER and verify tempo, media, and automation.
+
+For the catalogued Sony Wave64-style ACID layout, the converter reads project
+tempo/PPQ and emits each event at its decoded timeline position and length.
+Uncatalogued container variants still fall back to neutral media references at
+`0:00`. Time-signature field order beyond verified 4/4 projects, clip gain,
+pitch/stretch, envelopes, fades, and automation remain unverified and are not
+invented from undecoded fields.
 
 ## Requirements
 
@@ -37,7 +45,8 @@ Optional: `pip install ".[ole]"` for OLE compound project support where applicab
 # Convert; writes alongside the input unless you pass an output path
 acid2reaper path/to/project.acd
 
-acid2reaper path/to/bundle.acd-zip -o out.rpp --media-dir /path/to/audio
+# The output path is positional; --media-dir may be repeated
+acid2reaper path/to/bundle.acd-zip out.rpp --media-dir /path/to/audio
 
 # Graphical UI
 acid2reaper --gui
@@ -46,7 +55,7 @@ acid2reaper --gui
 
 ## Version
 
-- **PyPI / package version:** `0.1.0` (see `src/acid2reaper/_version.py`).
+- **PyPI / package version:** `0.1.2` (see `src/acid2reaper/_version.py`).
 - **Marketing label:** **0.1 (Beta)**.
 
 ```bash

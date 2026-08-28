@@ -1,10 +1,10 @@
 # Releasing ACID2Reaper
 
-The current public line is the **first beta** (**0.1.0**). Future releases will follow the same process below.
+The current public line is the **first beta** (**0.1.2**). Future releases will follow the same process below.
 
 ## Version numbers (Python package)
 
-The installable **package version** is plain [semantic versioning](https://semver.org/) in metadata (no `v` prefix), e.g. `0.1.0` in `pyproject.toml` and `src/acid2reaper/_version.py`.
+The installable **package version** is plain [semantic versioning](https://semver.org/) in metadata (no `v` prefix), e.g. `0.1.2` in `pyproject.toml` and `src/acid2reaper/_version.py`.
 
 1. Bump `src/acid2reaper/_version.py` (`__version__` and optional `__version_label__`).
 2. Match `version = "..."` in `pyproject.toml`.
@@ -28,11 +28,11 @@ When you publish a [GitHub Release](https://docs.github.com/en/repositories/rele
 Example annotated tag and push:
 
 ```bash
-git tag -a v0.1.0 -m "ACID2Reaper 0.1.0 Beta"
-git push origin v0.1.0
+git tag -a v0.1.2 -m "ACID2Reaper 0.1.2 Beta"
+git push origin v0.1.2
 ```
 
-The tag’s numeric part should match the package version in `pyproject.toml` (e.g. package `0.1.0` → tag `v0.1.0` or a pre-release variant like `v0.1.0-beta.1`).
+The tag’s numeric part should match the package version in `pyproject.toml` (e.g. package `0.1.2` → tag `v0.1.2` or a pre-release variant like `v0.1.2-beta.1`).
 
 `.github/workflows/release.yml` runs on tags matching `v*.*.*`, which includes common pre-release tag names such as `v1.0.0-beta.1`.
 
@@ -58,6 +58,10 @@ Pushing a matching **tag** triggers the workflow in [`.github/workflows/release.
 5. **Environment name:** leave blank unless you add a named GitHub environment later.
 
 The workflow job must keep `permissions: id-token: write` (already set). The **Publish to PyPI** step is gated to `github.repository == 'gorfednet/ACID2REAPER'` so forks do not publish.
+
+Create the pending publisher **before pushing a release tag**. The release workflow
+checks that GitHub can mint its PyPI OIDC token before it creates a GitHub Release,
+but only PyPI can validate that the pending-publisher fields above match.
 
 ### Optional: TestPyPI
 
