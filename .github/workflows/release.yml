@@ -1,5 +1,6 @@
-# Push a version tag (v*.*.*) to run tests, build the PyPI sdist/wheel, attach them to a
-# GitHub Release, and publish to PyPI via trusted publishing (OIDC — no long-lived token).
+# Push a version tag (v*.*.*) to run tests, build sdist/wheel, and attach them to a
+# GitHub Release. PyPI publish is intentionally omitted (account unavailable); re-add
+# trusted publishing later — see RELEASING.md.
 # Tag naming: see RELEASING.md (e.g. v1.0.0 or v0.2.0-beta.1).
 name: Release
 
@@ -10,7 +11,6 @@ on:
 
 permissions:
   contents: write
-  id-token: write
 
 jobs:
   release:
@@ -36,31 +36,6 @@ jobs:
 
       - name: Build sdist and wheel
         run: python -m build
-
-      - name: "Preflight: verify PyPI OIDC token access"
-        if: github.repository == 'gorfednet/ACID2REAPER'
-        shell: bash
-        run: |
-          set -euo pipefail
-          echo "::notice::PyPI must have a pending publisher for gorfednet/ACID2REAPER, workflow release.yml, with no environment name."
-          if [[ -z "${ACTIONS_ID_TOKEN_REQUEST_URL:-}" || -z "${ACTIONS_ID_TOKEN_REQUEST_TOKEN:-}" ]]; then
-            echo "::error::GitHub OIDC is unavailable. Keep 'permissions: id-token: write' on this workflow."
-            exit 1
-          fi
-          if ! curl --fail --silent --show-error \
-            -H "Authorization: bearer ${ACTIONS_ID_TOKEN_REQUEST_TOKEN}" \
-            "${ACTIONS_ID_TOKEN_REQUEST_URL}&audience=pypi" |
-            python -c "import json,sys; assert json.load(sys.stdin).get('value'), 'OIDC response has no token'"; then
-            echo "::error::Could not mint the PyPI OIDC token. Do not create a release tag until trusted publishing is configured."
-            exit 1
-          fi
-          echo "::notice::GitHub OIDC token minted. PyPI will now validate the pending-publisher configuration."
-
-      - name: Publish to PyPI
-        # Configure this first: https://pypi.org/manage/project/acid2reaper/settings/publishing/
-        # Pending publisher: gorfednet/ACID2REAPER, release.yml, environment left blank.
-        if: github.repository == 'gorfednet/ACID2REAPER'
-        uses: pypa/gh-action-pypi-publish@release/v1
 
       - name: Publish GitHub Release (assets + notes)
         uses: softprops/action-gh-release@v2

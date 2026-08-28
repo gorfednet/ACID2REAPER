@@ -27,17 +27,28 @@ invented from undecoded fields.
 - **Python 3.9+**
 - Pip package dependencies: see `pyproject.toml` (includes `rpp`).
 
-## Install (from source)
+## Install
+
+### From a GitHub Release (recommended)
+
+```bash
+python3 -m pip install \
+  https://github.com/gorfednet/ACID2REAPER/releases/download/v0.1.2/acid2reaper-0.1.2-py3-none-any.whl
+```
+
+On macOS, user installs often land in `~/Library/Python/3.9/bin` — put that directory on your `PATH`, or run `python3 -m acid2reaper`.
+
+### From source
 
 ```bash
 git clone https://github.com/gorfednet/ACID2REAPER.git
 cd ACID2Reaper
 python3 -m venv .venv
 source .venv/bin/activate   # Windows: .venv\Scripts\activate
-pip install .
+python3 -m pip install -e .
 ```
 
-Optional: `pip install ".[ole]"` for OLE compound project support where applicable.
+Optional: `python3 -m pip install ".[ole]"` for OLE compound project support where applicable.
 
 ## Usage
 
@@ -55,7 +66,7 @@ acid2reaper --gui
 
 ## Version
 
-- **PyPI / package version:** `0.1.2` (see `src/acid2reaper/_version.py`).
+- **Package version:** `0.1.2` (see `src/acid2reaper/_version.py`). Distributed via **GitHub Releases** (PyPI optional later).
 - **Marketing label:** **0.1 (Beta)**.
 
 ```bash
@@ -64,7 +75,7 @@ acid2reaper --version
 
 ## Building binaries
 
-See [packaging/BUILD.md](packaging/BUILD.md). For **git tag names**, **PyPI**, and automated **GitHub Releases** (sdist/wheel on tag push), see [RELEASING.md](RELEASING.md). Every release build should pass:
+See [packaging/BUILD.md](packaging/BUILD.md). For **git tag names** and automated **GitHub Releases** (sdist/wheel on tag push), see [RELEASING.md](RELEASING.md). Every release build should pass:
 
 ```bash
 python scripts/verify_changelog.py
