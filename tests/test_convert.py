@@ -24,6 +24,8 @@ def test_drum_roll_acd_to_rpp(tmp_path: Path) -> None:
     assert text.count("<ITEM") == 15
     assert "PITCHSHIFT" not in text
     assert "VOLPAN 0.5 0 1 -1" not in text
+    assert "SOFFS" in text
+    assert "SNAPOFFS" not in text
     positions = [float(v) for v in re.findall(r"^\s*POSITION\s+([0-9.]+)", text, re.MULTILINE)]
     lengths = [float(v) for v in re.findall(r"^\s*LENGTH\s+([0-9.]+)", text, re.MULTILINE)]
     expected_ticks = [
