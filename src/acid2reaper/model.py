@@ -27,7 +27,7 @@ class AcidClip:
     pitch_semitones: float = 0.0
     playrate: float = 1.0
     reverse: bool = False
-    # In-point into the media file (seconds). Exported as ITEM SNAPOFFS (approximate).
+    # In-point into the media file (seconds). Exported as ITEM SOFFS.
     source_trim_start_sec: float = 0.0
 
 

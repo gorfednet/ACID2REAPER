@@ -45,7 +45,8 @@ def _item_playrate_tokens(clip: AcidClip) -> tuple[str, ...]:
         r = abs(r)
     if r == 0.0:
         r = 1.0
-    return (format_rpp_float(r), "0", "0", "0", "0", "0", "0", "0")
+    # Second token: preserve pitch while changing rate (ACID beat-maps that way).
+    return (format_rpp_float(r), "1", "0", "0", "0", "0", "0", "0")
 
 
 def _fxchain_element(slots: list[FxSlot]) -> Element:
@@ -148,8 +149,9 @@ def _regular_track_element(track: AcidTrack, track_index: int) -> Element:
 
         it = Element("ITEM", ())
         it.children.append(_line("POSITION", format_rpp_float(clip.position_sec)))
-        snap = clip.source_trim_start_sec if clip.source_trim_start_sec else 0.0
-        it.children.append(_line("SNAPOFFS", format_rpp_float(snap)))
+        # REAPER source in-point is SOFFS (SNAPOFFS is the item snap point).
+        soffs = clip.source_trim_start_sec if clip.source_trim_start_sec else 0.0
+        it.children.append(_line("SOFFS", format_rpp_float(soffs)))
         it.children.append(_line("LENGTH", format_rpp_float(length)))
 
         vol = max(0.0, float(clip.volume_linear))
