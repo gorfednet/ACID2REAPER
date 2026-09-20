@@ -9,6 +9,7 @@ import pytest
 from acid2reaper.binary.acid_chunk import FLAG_ONE_SHOT
 from acid2reaper.cli import convert
 from fixturelib.offsets import SOURCE_ACID_LEAF_OFFSET, SOURCE_FLAGS_OFFSET
+from fixturelib.rpp_assert import assert_valid_rpp
 from rpp import loads
 
 
@@ -20,6 +21,7 @@ def test_drum_roll_acd_to_rpp(tmp_path: Path) -> None:
     out = tmp_path / "out.rpp"
     convert(acd, out)
     text = out.read_text(encoding="utf-8")
+    assert_valid_rpp(text)
     assert "REAPER_PROJECT" in text
     assert "Break Pattern" in text or "break pattern" in text.lower()
     # The event timeline is structural; unrelated version/record fields must not
@@ -66,6 +68,7 @@ def test_acd_zip_to_rpp(tmp_path: Path, isolated_acd_zip: Path) -> None:
     out = tmp_path / "zip_out.rpp"
     convert(isolated_acd_zip, out)
     text = out.read_text(encoding="utf-8")
+    assert_valid_rpp(text)
     root = loads(text)
     assert root.tag == "REAPER_PROJECT"
 
@@ -77,6 +80,7 @@ def test_standalone_acd_file_token_is_project_relative(tmp_path: Path) -> None:
     # Run from an empty CWD-like directory so a bare basename would miss media.
     convert(acd, out)
     text = out.read_text(encoding="utf-8")
+    assert_valid_rpp(text)
     # FILE path must include the fixtures directory, not only a bare filename.
     assert "Break Pattern" in text
     assert str(FIXTURES) in text or "DrumRollUpDemo" in text or "fixtures" in text.lower()
@@ -100,6 +104,7 @@ def test_playrate_from_cached_source_tempo(tmp_path: Path) -> None:
     out = tmp_path / "playrate.rpp"
     convert(acd, out)
     text = out.read_text(encoding="utf-8")
+    assert_valid_rpp(text)
 
     lines = _playrate_lines(text)
     assert len(lines) == 15
@@ -129,6 +134,7 @@ def test_playrate_falls_back_to_unity_without_cached_source_tempo(tmp_path: Path
     out = tmp_path / "fallback.rpp"
     convert(acd, out)
     text = out.read_text(encoding="utf-8")
+    assert_valid_rpp(text)
 
     assert _playrate_lines(text) == []
     assert text.count("<ITEM") == 15
@@ -155,6 +161,7 @@ def test_implausible_playrate_is_never_exported(tmp_path: Path, bad_rate: float)
     out = tmp_path / "clamped.rpp"
     write_rpp(project, out)
     text = out.read_text(encoding="utf-8")
+    assert_valid_rpp(text)
 
     assert _playrate_lines(text) == []
     assert "nan" not in text.lower()
@@ -201,6 +208,7 @@ def test_acd_event_length_wins_over_colocated_wav_duration(tmp_path: Path) -> No
     out = work / "out.rpp"
     convert(work / "DrumRollUpDemo.acd", out)
     text = out.read_text(encoding="utf-8")
+    assert_valid_rpp(text)
     assert (work / "Break Pattern c.WAV").exists()
     assert str(work) in text or "Break Pattern c.WAV" in text
     m = re.search(r"LENGTH\s+([0-9.]+)", text)
@@ -215,6 +223,7 @@ def test_notes_block_is_emitted_and_round_trips(tmp_path: Path) -> None:
     out = tmp_path / "notes.rpp"
     convert(FIXTURES / "DrumRollUpDemo.acd", out)
     text = out.read_text(encoding="utf-8")
+    assert_valid_rpp(text)
 
     assert "<NOTES" in text
     assert "|Project tempo: 120 BPM; time signature 4/4." in text
@@ -237,6 +246,7 @@ def test_items_carry_a_name(tmp_path: Path) -> None:
     out = tmp_path / "named.rpp"
     convert(FIXTURES / "DrumRollUpDemo.acd", out)
     text = out.read_text(encoding="utf-8")
+    assert_valid_rpp(text)
     assert text.count('NAME "Break Pattern c"') == 16  # 15 items plus the track
 
 
@@ -263,6 +273,7 @@ def test_one_shot_sources_are_not_stretched(tmp_path: Path) -> None:
     out = tmp_path / "one_shot.rpp"
     convert(acd, out)
     text = out.read_text(encoding="utf-8")
+    assert_valid_rpp(text)
 
     assert _playrate_lines(text) == []
     assert "One-shot sources left unstretched" in text
@@ -275,5 +286,6 @@ def test_loops_are_still_stretched(tmp_path: Path) -> None:
     out = tmp_path / "loop.rpp"
     convert(FIXTURES / "DrumRollUpDemo.acd", out)
     text = out.read_text(encoding="utf-8")
+    assert_valid_rpp(text)
     assert len(_playrate_lines(text)) == 15
     assert "One-shot sources left unstretched" not in text

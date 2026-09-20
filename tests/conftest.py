@@ -48,6 +48,10 @@ def _fixture_tree() -> list[str]:
 @pytest.fixture(scope="session", autouse=True)
 def _no_repo_writes():
     """Fail the session if any test creates or removes a file under tests/fixtures/."""
+    if os.environ.get("ACID2REAPER_UPDATE_GOLDEN") == "1":
+        # Regenerating goldens is the one sanctioned way to write here.
+        yield
+        return
     before = _fixture_tree()
     yield
     after = _fixture_tree()

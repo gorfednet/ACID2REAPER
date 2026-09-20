@@ -271,11 +271,13 @@ def parse_acid_project(
             clip = AcidClip(path=resolved, position_sec=0.0, name=name)
             tracks.append(AcidTrack(name=name, clips=[clip]))
 
+    # Only tempos that were actually used to stretch something: listing a
+    # one-shot's cached tempo here reads as if it had been applied.
     source_tempos = sorted(
         {
             track.source_loop.tempo_bpm
             for track in (wave64_timeline.tracks if wave64_timeline is not None else ())
-            if track.source_loop is not None
+            if track.source_loop is not None and not track.source_loop.one_shot
         }
     )
 
