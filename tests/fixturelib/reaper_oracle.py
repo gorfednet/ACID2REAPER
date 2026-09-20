@@ -185,7 +185,10 @@ def _first(element: Element, tag: str, default: Optional[str] = None) -> Optiona
 def project_rpp(text: str) -> RppProjection:
     """Reduce a project file to its musically meaningful content."""
     root = loads(text)
-    _, tempo, num, den = _lines(root, "TEMPO")[0]
+    # REAPER writes its own trailing fields (TEMPO 140 7 8 0), so read by
+    # position rather than unpacking a fixed width.
+    tempo_line = _lines(root, "TEMPO")[0]
+    tempo, num, den = tempo_line[1], tempo_line[2], tempo_line[3]
 
     names: List[str] = []
     items: List[Tuple[str, float, float, float, float, str]] = []
@@ -204,7 +207,7 @@ def project_rpp(text: str) -> RppProjection:
                     float(_first(item, "POSITION", "0")),
                     float(_first(item, "LENGTH", "0")),
                     float(_first(item, "SOFFS", "0")),
-                    float(playrate[0][1]) if playrate else 1.0,
+                    float(playrate[0][1]) if playrate and len(playrate[0]) > 1 else 1.0,
                     Path((file_token or "").replace("\\", "/")).name.lower(),
                 )
             )
