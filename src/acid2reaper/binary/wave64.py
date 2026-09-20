@@ -17,6 +17,15 @@ import uuid
 from dataclasses import dataclass
 from typing import Iterator, Optional, Tuple
 
+from .acid_chunk import (
+    ACID_CHUNK_BYTES,
+    BEATS_MAX,
+    FLAG_ONE_SHOT,
+    METER_MAX,
+    AcidChunk,
+    parse_acid_chunk,
+)
+
 
 RIFF_GUID = uuid.UUID("66666972-912e-11cf-a5d6-28db04c10000")
 LIST_GUID = uuid.UUID("7473696c-912f-11cf-a5d6-28db04c10000")
@@ -28,14 +37,10 @@ EVENT_GUID = uuid.UUID("168d206a-2321-11d2-86b0-00c04f8edb8a")
 SOURCE_ACID_GUID = uuid.UUID("5c538752-e345-4f78-83b8-551935b4c6f7")
 
 # The 5c538752 leaf wraps an eight-byte record header (uint32 record byte count,
-# uint32 reserved) around a verbatim copy of the source media file's standard
-# ACID ``acid`` RIFF chunk, so the cached loop fields keep that chunk's offsets.
+# int32 record type/version tag) around a verbatim copy of the source media
+# file's standard ACID ``acid`` RIFF chunk, so the cached loop is decoded by the
+# shared parser in :mod:`.acid_chunk`.
 _SOURCE_ACID_RECORD_HEADER = 8
-_SOURCE_ACID_CHUNK_BYTES = 24
-_ACID_CHUNK_BEATS = 12
-_ACID_CHUNK_METER_DEN = 16
-_ACID_CHUNK_METER_NUM = 18
-_ACID_CHUNK_TEMPO = 20
 
 
 @dataclass(frozen=True)
@@ -65,6 +70,13 @@ class AcidSourceLoop:
     beats: Optional[int]
     time_sig_num: Optional[int]
     time_sig_den: Optional[int]
+    flags: int = 0
+    root_note: Optional[int] = None
+
+    @property
+    def one_shot(self) -> bool:
+        """True for a one-shot source, which must never be beat-mapped."""
+        return bool(self.flags & FLAG_ONE_SHOT)
 
 
 @dataclass(frozen=True)
@@ -210,34 +222,37 @@ def _first_utf16_audio_path(data: bytes) -> Optional[str]:
 
 
 def _source_loop_in_track(data: bytes, track: Wave64Node) -> Optional[AcidSourceLoop]:
-    """Read a track's cached source-loop tempo from its 5c538752 leaf, if plausible."""
+    """Read a track's cached source-loop metadata from its 5c538752 leaf, if plausible."""
 
-    minimum = _SOURCE_ACID_RECORD_HEADER + _SOURCE_ACID_CHUNK_BYTES
+    minimum = _SOURCE_ACID_RECORD_HEADER + ACID_CHUNK_BYTES
     for node in iter_wave64_nodes(track):
         if node.guid != SOURCE_ACID_GUID or node.form_guid is not None:
             continue
         if node.payload_size < minimum:
             continue
-        acid = node.payload_offset + _SOURCE_ACID_RECORD_HEADER
         try:
             record_bytes = struct.unpack_from("<I", data, node.payload_offset)[0]
-            beats = struct.unpack_from("<I", data, acid + _ACID_CHUNK_BEATS)[0]
-            sig_den = struct.unpack_from("<H", data, acid + _ACID_CHUNK_METER_DEN)[0]
-            sig_num = struct.unpack_from("<H", data, acid + _ACID_CHUNK_METER_NUM)[0]
-            tempo = struct.unpack_from("<f", data, acid + _ACID_CHUNK_TEMPO)[0]
         except struct.error:
             continue
         if not minimum <= record_bytes <= node.payload_size:
             continue
-        if not math.isfinite(tempo) or not 20.0 <= tempo <= 400.0:
+        chunk = parse_acid_chunk(data, node.payload_offset + _SOURCE_ACID_RECORD_HEADER)
+        if chunk is None:
             continue
-        return AcidSourceLoop(
-            tempo_bpm=float(tempo),
-            beats=beats if 1 <= beats <= 1_000_000 else None,
-            time_sig_num=sig_num if 1 <= sig_num <= 32 else None,
-            time_sig_den=sig_den if 1 <= sig_den <= 32 else None,
-        )
+        return _source_loop_from_chunk(chunk)
     return None
+
+
+def _source_loop_from_chunk(chunk: AcidChunk) -> AcidSourceLoop:
+    """Narrow a decoded ``acid`` chunk to the fields we are willing to act on."""
+    return AcidSourceLoop(
+        tempo_bpm=chunk.tempo_bpm,
+        beats=chunk.beats if 1 <= chunk.beats <= BEATS_MAX else None,
+        time_sig_num=chunk.meter_num if 1 <= chunk.meter_num <= METER_MAX else None,
+        time_sig_den=chunk.meter_den if 1 <= chunk.meter_den <= METER_MAX else None,
+        flags=chunk.flags,
+        root_note=chunk.effective_root_note,
+    )
 
 
 def extract_acid_wave64_timeline(data: bytes) -> Optional[AcidWave64Timeline]:

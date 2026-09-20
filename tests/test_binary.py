@@ -160,3 +160,15 @@ def test_wave64_rejects_chunk_past_container_end() -> None:
     raw = bytearray((FIXTURES / "DrumRollUpDemo.acd").read_bytes())
     raw[56:64] = (len(raw) + 1).to_bytes(8, "little")
     assert parse_wave64_tree(bytes(raw)) is None
+
+
+def test_source_loop_carries_acid_flags_and_gated_root_note(drum_roll_bytes: bytes) -> None:
+    """Flags come through; the root note does not, because its flag bit is clear."""
+    timeline = extract_acid_wave64_timeline(drum_roll_bytes)
+    source_loop = timeline.tracks[0].source_loop
+    assert source_loop is not None
+    assert source_loop.flags == 0
+    assert source_loop.one_shot is False
+    # The chunk stores root_note 0x3C with flags == 0, so the value is a default
+    # rather than a real root and must not be surfaced.
+    assert source_loop.root_note is None
