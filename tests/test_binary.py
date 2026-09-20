@@ -12,8 +12,10 @@ from acid2reaper.binary.wave64 import (
     EVENT_LIST_FORM_GUID,
     SOURCE_ACID_GUID,
     extract_acid_wave64_timeline,
+    extract_timebase,
     iter_wave64_nodes,
     parse_wave64_tree,
+    tempo_from_usec_per_beat,
 )
 from fixturelib.offsets import (
     SOURCE_ACID_LEAF_OFFSET,
@@ -172,3 +174,78 @@ def test_source_loop_carries_acid_flags_and_gated_root_note(drum_roll_bytes: byt
     # The chunk stores root_note 0x3C with flags == 0, so the value is a default
     # rather than a real root and must not be surfaced.
     assert source_loop.root_note is None
+
+
+def test_timebase_record_is_the_tempo_source(drum_roll_bytes: bytes) -> None:
+    """The 946739be record carries PPQ and tempo as microseconds per beat."""
+    root = parse_wave64_tree(drum_roll_bytes)
+    timebase = extract_timebase(drum_roll_bytes, root)
+    assert timebase is not None
+    assert timebase.ppq == 24576
+    assert timebase.usec_per_beat == 500_000
+    assert timebase.tempo_bpm == 120.0
+    # This build zeroes the meter here and keeps it in the project record.
+    assert timebase.time_sig_num is None
+    assert timebase.time_sig_den is None
+
+
+@pytest.mark.parametrize(
+    "usec_per_beat, expected",
+    [
+        (500_000, 120.0),
+        (326_087, 184.0),
+        (337_079, 178.0),
+        (612_245, 98.0),
+        (413_793, 145.0),
+        (750_000, 80.0),
+        (698_487, 85.9),
+        (332_410, 180.5),
+        (764_331, 78.5),
+        (402_685, 149.0),
+    ],
+)
+def test_tempo_recovered_from_rounded_usec_per_beat(usec_per_beat: int, expected: float) -> None:
+    """
+    ACID stores a rounded integer, so 60e6/337079 is 177.99982, not 178.
+
+    Recovering the simplest decimal that re-encodes to the same integer puts the
+    tempo the user typed back in the REAPER tempo box.
+    """
+    recovered = tempo_from_usec_per_beat(usec_per_beat)
+    assert recovered == expected
+    assert round(60_000_000 / recovered) == usec_per_beat
+
+
+def test_project_time_signature_is_decoded(drum_roll_bytes: bytes) -> None:
+    """
+    Regression: the meter used to be unreachable.
+
+    It was read as two uint32 candidates, which for a 4/4 project are 0 and
+    262148 -- both outside the 1..32 gate -- so every project silently fell back
+    to 4/4 regardless of its real meter. It is a uint16 pair.
+    """
+    timeline = extract_acid_wave64_timeline(drum_roll_bytes)
+    assert (timeline.time_sig_num, timeline.time_sig_den) == (4, 4)
+
+
+def test_recovers_from_an_unbackfilled_root_size(drum_roll_bytes: bytes) -> None:
+    """A root size left at the bare header length must not reject the project."""
+    raw = bytearray(drum_roll_bytes)
+    struct.pack_into("<Q", raw, 16, 24)
+    root = parse_wave64_tree(bytes(raw))
+    assert root is not None
+    assert extract_acid_wave64_timeline(bytes(raw)) is not None
+
+
+def test_oversized_root_size_is_still_rejected(drum_roll_bytes: bytes) -> None:
+    """Only the too-small case is recoverable; a size past EOF stays a failure."""
+    raw = bytearray(drum_roll_bytes)
+    struct.pack_into("<Q", raw, 16, len(raw) + 4096)
+    assert parse_wave64_tree(bytes(raw)) is None
+
+
+def test_tempo_recovery_keeps_genuinely_odd_tempos_intact() -> None:
+    """Snapping must not invent a round number where the author had none."""
+    recovered = tempo_from_usec_per_beat(673_252)
+    assert recovered == pytest.approx(89.11967584203241)
+    assert round(60_000_000 / recovered) == 673_252

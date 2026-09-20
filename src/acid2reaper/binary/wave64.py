@@ -17,11 +17,14 @@ import uuid
 from dataclasses import dataclass
 from typing import Iterator, Optional, Tuple
 
+from .meter import DEN_NUM, resolve_meter
 from .acid_chunk import (
     ACID_CHUNK_BYTES,
     BEATS_MAX,
     FLAG_ONE_SHOT,
     METER_MAX,
+    TEMPO_MAX,
+    TEMPO_MIN,
     AcidChunk,
     parse_acid_chunk,
 )
@@ -35,6 +38,14 @@ TRACK_FORM_GUID = uuid.UUID("4d6c0748-2316-11d2-86b0-00c04f8edb8a")
 EVENT_LIST_FORM_GUID = uuid.UUID("4d6c0749-2316-11d2-86b0-00c04f8edb8a")
 EVENT_GUID = uuid.UUID("168d206a-2321-11d2-86b0-00c04f8edb8a")
 SOURCE_ACID_GUID = uuid.UUID("5c538752-e345-4f78-83b8-551935b4c6f7")
+# Newer ACID builds moved the per-track media reference out of the 4d6c0749
+# track record into its own leaf. Projects from those builds have an empty
+# 88-byte track record, so looking only at 4d6c0749 loses every path.
+TRACK_MEDIA_GUID = uuid.UUID("bf0a0344-f8a7-47f4-88cb-a63c7756ba9e")
+# The project timebase record: PPQ, tempo as microseconds per beat, and the
+# time signature. This -- not the project record's float64 -- is where ACID
+# keeps the tempo the user actually set.
+TIMEBASE_FORM_GUID = uuid.UUID("946739be-391a-4384-8785-38bda35f409a")
 
 # The 5c538752 leaf wraps an eight-byte record header (uint32 record byte count,
 # int32 record type/version tag) around a verbatim copy of the source media
@@ -87,6 +98,17 @@ class AcidTrackEvents:
 
 
 @dataclass(frozen=True)
+class AcidTimebase:
+    """Project tempo, resolution and meter, from the 946739be timebase record."""
+
+    ppq: int
+    usec_per_beat: int
+    tempo_bpm: float
+    time_sig_num: Optional[int]
+    time_sig_den: Optional[int]
+
+
+@dataclass(frozen=True)
 class AcidWave64Timeline:
     ppq: int
     tempo_bpm: float
@@ -120,8 +142,15 @@ def parse_wave64_tree(data: bytes) -> Optional[Wave64Node]:
         root_form = _guid_at(data, 24)
     except (ValueError, struct.error):
         return None
-    if root_guid != RIFF_GUID or root_size < 40 or root_size > len(data):
+    if root_guid != RIFF_GUID:
         return None
+    if root_size < 40 or root_size > len(data):
+        # Some ACID builds leave the root size at the bare header length (24)
+        # instead of backfilling it after writing. The chunk stream is intact,
+        # so fall back to the file extent rather than rejecting the project.
+        if root_size >= 40:
+            return None
+        root_size = len(data)
 
     chunk_budget = max(1, root_size // 24)
 
@@ -221,6 +250,36 @@ def _first_utf16_audio_path(data: bytes) -> Optional[str]:
     return best
 
 
+def _track_media_path(
+    data: bytes,
+    track: Wave64Node,
+    record: Optional[Wave64Node],
+) -> Optional[str]:
+    """
+    Find a track's media file reference, across ACID build generations.
+
+    Older builds store the UTF-16LE path inside the 4d6c0749 track record.
+    Newer builds leave that record empty and put the path in a dedicated
+    bf0a0344 leaf instead, which is why projects saved by different ACID
+    versions used to convert with every track pointing at one fallback file.
+
+    A track may carry several media leaves (a source replaced mid-project, or
+    events drawn from more than one file). We take the first, which is the one
+    ACID names the track after.
+    """
+    if record is not None:
+        path = _first_utf16_audio_path(data[record.payload_offset : record.offset + record.size])
+        if path:
+            return path
+    for node in iter_wave64_nodes(track):
+        if node.guid != TRACK_MEDIA_GUID or node.form_guid is not None:
+            continue
+        path = _first_utf16_audio_path(data[node.payload_offset : node.offset + node.size])
+        if path:
+            return path
+    return None
+
+
 def _source_loop_in_track(data: bytes, track: Wave64Node) -> Optional[AcidSourceLoop]:
     """Read a track's cached source-loop metadata from its 5c538752 leaf, if plausible."""
 
@@ -255,7 +314,72 @@ def _source_loop_from_chunk(chunk: AcidChunk) -> AcidSourceLoop:
     )
 
 
-def extract_acid_wave64_timeline(data: bytes) -> Optional[AcidWave64Timeline]:
+_TIMEBASE_RECORD_BYTES = 20
+_TIMEBASE_PPQ = 4
+_TIMEBASE_USEC_PER_BEAT = 8
+_TIMEBASE_METER = 16
+
+
+def tempo_from_usec_per_beat(usec_per_beat: int) -> float:
+    """
+    Recover the authored tempo from ACID's integer microseconds-per-beat.
+
+    The stored value is rounded, so dividing straight back gives 177.99982
+    where the user typed 178. Rather than leave that in the REAPER tempo box,
+    look for the simplest decimal that re-encodes to exactly the same integer.
+    If none does, return the plain quotient.
+    """
+    exact = 60_000_000.0 / usec_per_beat
+    for places in (0, 1, 2, 3):
+        candidate = round(exact, places)
+        if candidate > 0 and round(60_000_000.0 / candidate) == usec_per_beat:
+            return candidate
+    return exact
+
+
+def extract_timebase(data: bytes, root: Wave64Node, *, meter_order: str = DEN_NUM) -> Optional[AcidTimebase]:
+    """Decode the 946739be timebase record, if the project carries one."""
+    container = next(
+        (n for n in iter_wave64_nodes(root) if n.form_guid == TIMEBASE_FORM_GUID),
+        None,
+    )
+    if container is None:
+        return None
+    for leaf in container.children:
+        if leaf.form_guid is not None or leaf.payload_size < 24:
+            continue
+        try:
+            record_bytes = struct.unpack_from("<I", data, leaf.payload_offset)[0]
+            ppq = struct.unpack_from("<I", data, leaf.payload_offset + _TIMEBASE_PPQ)[0]
+            usec = struct.unpack_from("<I", data, leaf.payload_offset + _TIMEBASE_USEC_PER_BEAT)[0]
+            meter_a, meter_b = struct.unpack_from("<HH", data, leaf.payload_offset + _TIMEBASE_METER)
+        except struct.error:
+            continue
+        if record_bytes != _TIMEBASE_RECORD_BYTES:
+            continue
+        if not 1 <= ppq <= 10_000_000 or usec <= 0:
+            continue
+        tempo = tempo_from_usec_per_beat(usec)
+        if not math.isfinite(tempo) or not TEMPO_MIN <= tempo <= TEMPO_MAX:
+            continue
+        # ACID 3-era builds leave this pair zeroed and keep the meter in the
+        # project record instead, so an unusable pair is normal, not a failure.
+        meter = resolve_meter(meter_a, meter_b, order=meter_order)
+        return AcidTimebase(
+            ppq=ppq,
+            usec_per_beat=usec,
+            tempo_bpm=tempo,
+            time_sig_num=meter[0] if meter else None,
+            time_sig_den=meter[1] if meter else None,
+        )
+    return None
+
+
+def extract_acid_wave64_timeline(
+    data: bytes,
+    *,
+    meter_order: str = DEN_NUM,
+) -> Optional[AcidWave64Timeline]:
     """Extract verified project timing and event leaves from the ACID Wave64 layout."""
 
     root = parse_wave64_tree(data)
@@ -269,12 +393,29 @@ def extract_acid_wave64_timeline(data: bytes) -> Optional[AcidWave64Timeline]:
     try:
         sample_rate = struct.unpack_from("<I", data, payload + 12)[0]
         tempo = struct.unpack_from("<d", data, payload + 24)[0]
-        time_num = struct.unpack_from("<I", data, payload + 36)[0]
-        time_den = struct.unpack_from("<I", data, payload + 40)[0]
+        meter_a, meter_b = struct.unpack_from("<HH", data, payload + 40)
         ppq = struct.unpack_from("<I", data, payload + 44)[0]
     except struct.error:
         return None
-    if not math.isfinite(tempo) or not 20.0 <= tempo <= 400.0 or not 1 <= ppq <= 10_000_000:
+    project_meter = resolve_meter(meter_a, meter_b, order=meter_order)
+    time_num = project_meter[0] if project_meter else None
+    time_den = project_meter[1] if project_meter else None
+
+    # The project record's float64 is a template default -- it reads exactly
+    # 120.0 in every real project examined, including ones authored at 98, 145
+    # and 184 BPM. The timebase record is the authoritative source; fall back to
+    # the project record only when a file has no timebase leaf at all.
+    timebase = extract_timebase(data, root, meter_order=meter_order)
+    if timebase is not None:
+        tempo = timebase.tempo_bpm
+        ppq = timebase.ppq
+        if timebase.time_sig_num and timebase.time_sig_den:
+            time_num = timebase.time_sig_num
+            time_den = timebase.time_sig_den
+
+    if not math.isfinite(tempo) or not TEMPO_MIN <= tempo <= TEMPO_MAX:
+        return None
+    if not 1 <= ppq <= 10_000_000:
         return None
     if sample_rate not in {
         8000,
@@ -292,11 +433,6 @@ def extract_acid_wave64_timeline(data: bytes) -> Optional[AcidWave64Timeline]:
         192000,
     }:
         sample_rate = None
-    if not 1 <= time_num <= 32:
-        time_num = None
-    if not 1 <= time_den <= 32:
-        time_den = None
-
     track_list = next(
         (n for n in iter_wave64_nodes(root) if n.form_guid == TRACK_LIST_FORM_GUID),
         None,
@@ -314,11 +450,7 @@ def extract_acid_wave64_timeline(data: bytes) -> Optional[AcidWave64Timeline]:
             ),
             None,
         )
-        media_path = None
-        if record is not None:
-            media_path = _first_utf16_audio_path(
-                data[record.payload_offset : record.offset + record.size]
-            )
+        media_path = _track_media_path(data, track, record)
 
         event_list = next(
             (n for n in track.children if n.form_guid == EVENT_LIST_FORM_GUID),
@@ -334,14 +466,16 @@ def extract_acid_wave64_timeline(data: bytes) -> Optional[AcidWave64Timeline]:
                 position, length = struct.unpack_from("<QQ", data, node.payload_offset + 0x10)
                 if length > 0:
                     events.append(AcidEventTicks(position, length))
-        if events:
-            tracks.append(
-                AcidTrackEvents(
-                    media_path=media_path,
-                    events=tuple(events),
-                    source_loop=_source_loop_in_track(data, track),
-                )
+        # Keep tracks with no events. Dropping them silently renumbered every
+        # track after the gap, and made an otherwise-valid empty project look
+        # like an undecodable file.
+        tracks.append(
+            AcidTrackEvents(
+                media_path=media_path,
+                events=tuple(events),
+                source_loop=_source_loop_in_track(data, track),
             )
+        )
 
     if not tracks:
         return None
