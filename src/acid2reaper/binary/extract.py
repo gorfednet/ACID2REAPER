@@ -61,7 +61,7 @@ def _apply_family_fields(
         if fam.get("id") != family_id:
             continue
         fields = fam.get("fields") or {}
-        for key, spec in fields.items():
+        for spec in fields.values():
             enc = spec.get("encoding")
             off = int(spec.get("offset", -1))
             if enc == "float64_le":

@@ -13,14 +13,15 @@ import argparse
 import logging
 import sys
 from pathlib import Path
-from typing import Optional
+from typing import Callable, Optional, Sequence
 
 from . import __version__, __version_label__
+from .binary.meter import DEN_NUM, LEGAL_DENOMINATORS, MAX_NUMERATOR, NUM_DEN
 from .containers import sniff_project_bytes
 from .exceptions import Acid2ReaperError
 from .export_rpp import write_rpp
 from .scan import parse_acid_project
-from .security import validate_is_dir, validate_user_path, safe_output_path
+from .security import safe_output_path, validate_is_dir, validate_user_path
 
 
 def _build_parser() -> argparse.ArgumentParser:
@@ -81,13 +82,51 @@ def _build_parser() -> argparse.ArgumentParser:
         metavar="DIR",
         help="Extra folder to search for audio files (repeatable).",
     )
+    p.add_argument(
+        "--time-sig-order",
+        choices=[DEN_NUM, NUM_DEN],
+        default=DEN_NUM,
+        help=(
+            "Slot order for ACID's raw time-signature pair. Only matters when "
+            "both halves are powers of two (4/4, 4/8); 3/4, 5/4, 6/8 and 7/8 "
+            "resolve themselves. Default: %(default)s."
+        ),
+    )
+    p.add_argument(
+        "--time-sig",
+        metavar="NUM/DEN",
+        default=None,
+        help="Override the decoded time signature entirely, e.g. --time-sig 6/8.",
+    )
     return p
+
+
+def _parse_time_sig(value: str) -> tuple[int, int]:
+    """Parse a NUM/DEN override, rejecting anything REAPER would not accept."""
+    text = value.strip()
+    if "/" not in text:
+        raise Acid2ReaperError(f"--time-sig expects NUM/DEN, got {value!r}")
+    num_text, _, den_text = text.partition("/")
+    try:
+        num, den = int(num_text), int(den_text)
+    except ValueError:
+        raise Acid2ReaperError(f"--time-sig expects NUM/DEN, got {value!r}") from None
+    if not 1 <= num <= MAX_NUMERATOR:
+        raise Acid2ReaperError(f"--time-sig numerator must be 1..{MAX_NUMERATOR}, got {num}")
+    if den not in LEGAL_DENOMINATORS:
+        allowed = ", ".join(str(d) for d in sorted(LEGAL_DENOMINATORS))
+        raise Acid2ReaperError(f"--time-sig denominator must be one of {allowed}, got {den}")
+    return (num, den)
 
 
 def convert(
     input_path: Path,
     output_path: Path | None = None,
     extra_media_dirs: list[Path] | None = None,
+    *,
+    meter_order: str = DEN_NUM,
+    time_sig_override: tuple[int, int] | None = None,
+    on_notes: Callable[[Sequence[str]], None] | None = None,
 ) -> Path:
     """
     Run the full pipeline: validate paths, load bytes, parse, write .rpp.
@@ -109,8 +148,16 @@ def convert(
     raw, media_root, project_file = sniff_project_bytes(in_safe)
     roots.append(Path(media_root))
 
-    project = parse_acid_project(project_file, raw, roots)
+    project = parse_acid_project(
+        project_file,
+        raw,
+        roots,
+        meter_order=meter_order,
+        time_sig_override=time_sig_override,
+    )
     write_rpp(project, out)
+    if on_notes is not None:
+        on_notes(project.notes)
     return out
 
 
@@ -141,11 +188,19 @@ def main(argv: Optional[list[str]] = None) -> int:
         print("\nacid2reaper: error: the following arguments are required: input", file=sys.stderr)
         return 2
 
+    def report_notes(notes: Sequence[str]) -> None:
+        for note in notes:
+            print(f"acid2reaper: {note}", file=sys.stderr)
+
     try:
+        time_sig = _parse_time_sig(args.time_sig) if args.time_sig else None
         out = convert(
             args.input,
             args.output,
             extra_media_dirs=args.media_dir,
+            meter_order=args.time_sig_order,
+            time_sig_override=time_sig,
+            on_notes=report_notes if args.verbose else None,
         )
     except Acid2ReaperError as exc:
         log.debug("Conversion failed", exc_info=True)

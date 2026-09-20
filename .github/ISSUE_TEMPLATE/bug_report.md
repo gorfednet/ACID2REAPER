@@ -27,3 +27,7 @@ OS and version (e.g. macOS 15, Windows 11, Ubuntu 24.04):
 ## Sample file (optional)
 
 Describe the ACID project type (.acd / .acd-zip) and whether you can share a minimal repro (attach or link).
+
+For a project that converts with the **wrong tempo, meter, timing or media**,
+use the [Format sample](?template=format_sample.md) template instead, and
+include the output of `acid2reaper your-project.acd out.rpp -v`.

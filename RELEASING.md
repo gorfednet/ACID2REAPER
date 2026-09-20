@@ -1,10 +1,10 @@
 # Releasing ACID2Reaper
 
-The current public line is the **first beta** (**0.1.2**). Future releases will follow the same process below.
+The current public line is **0.2.0** (Beta). Future releases will follow the same process below.
 
 ## Version numbers (Python package)
 
-The installable **package version** is plain [semantic versioning](https://semver.org/) in metadata (no `v` prefix), e.g. `0.1.2` in `pyproject.toml` and `src/acid2reaper/_version.py`.
+The installable **package version** is plain [semantic versioning](https://semver.org/) in metadata (no `v` prefix), e.g. `0.2.0` in `pyproject.toml` and `src/acid2reaper/_version.py`.
 
 1. Bump `src/acid2reaper/_version.py` (`__version__` and optional `__version_label__`).
 2. Match `version = "..."` in `pyproject.toml`.
@@ -28,11 +28,11 @@ When you publish a [GitHub Release](https://docs.github.com/en/repositories/rele
 Example annotated tag and push:
 
 ```bash
-git tag -a v0.1.2 -m "ACID2Reaper 0.1.2 Beta"
-git push origin v0.1.2
+git tag -a v0.2.0 -m "ACID2Reaper 0.2.0 Beta"
+git push origin v0.2.0
 ```
 
-The tag’s numeric part should match the package version in `pyproject.toml` (e.g. package `0.1.2` → tag `v0.1.2` or a pre-release variant like `v0.1.2-beta.1`).
+The tag’s numeric part should match the package version in `pyproject.toml` (e.g. package `0.2.0` → tag `v0.2.0` or a pre-release variant like `v0.2.0-beta.1`).
 
 `.github/workflows/release.yml` runs on tags matching `v*.*.*`, which includes common pre-release tag names such as `v1.0.0-beta.1`.
 
@@ -52,13 +52,13 @@ Install from the release (macOS / Linux often need `python3 -m pip`):
 
 ```bash
 python3 -m pip install \
-  https://github.com/gorfednet/ACID2REAPER/releases/download/v0.1.2/acid2reaper-0.1.2-py3-none-any.whl
+  https://github.com/gorfednet/ACID2REAPER/releases/download/v0.2.0/acid2reaper-0.2.0-py3-none-any.whl
 ```
 
 Or from the tag without a wheel URL:
 
 ```bash
-python3 -m pip install "acid2reaper @ git+https://github.com/gorfednet/ACID2REAPER.git@v0.1.2"
+python3 -m pip install "acid2reaper @ git+https://github.com/gorfednet/ACID2REAPER.git@v0.2.0"
 ```
 
 ### PyPI (optional, deferred)

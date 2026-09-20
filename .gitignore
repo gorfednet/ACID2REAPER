@@ -13,3 +13,9 @@ packaging/*.log
 # SSH keys must live in ~/.ssh, not the repo
 id_ed25519
 id_ed25519.pub
+
+# Coverage output
+.coverage
+.coverage.*
+coverage.xml
+htmlcov/

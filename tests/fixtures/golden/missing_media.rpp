@@ -1,0 +1,109 @@
+<REAPER_PROJECT 0.1 6.0 0
+  RIPPLE 0
+  GROUPOVERRIDE 0 0 0
+  AUTOXFADE 0
+  ENVLOCKMODE 0
+  TEMPO 120 4 4
+  PLAYRATE 1 0 0.25 4
+  SELECTION 0 0
+  SELECTION2 0 0
+  MASTERAUTOMODE 0
+  MASTERTRACKHEIGHT 0 0
+  MASTERTRACKVIEW 1 0.6667 0.5 0.5 0 0 0
+  <NOTES 0 2
+    |Format family: riff_lower_guid_shell (ACID Pro ~3)
+    |Converted from ACID project (binary fingerprint + heuristics).
+    |Timeline positions and lengths extracted from catalogued Wave64 ACID events.
+    |Clip stretch (PLAYRATE, pitch preserved) derived from cached source loop tempo: 120 BPM
+    |Project tempo: 120 BPM; time signature 4/4.
+    |Verify: tempo, clip positions, stretch, pitch, envelopes, and FX.
+    |Matched signature record: sonic_foundry_acid3_drums_2001
+    |WARNING: media not found on disk (FILE paths are still project-relative; pass --media-dir or place WAV/AIFF next to the .acd): <TMP>/loop.wav
+  >
+  SAMPLERATE 44100 0 0
+  <TRACK
+    NAME ""
+    PEAKCOL 16576
+    BEAT -1
+    VOLPAN 1 0 1 -1
+    MUTESOLO 0 0 0
+    IPLUGINSTATE 0 0 0 0 0 0
+    <FXCHAIN
+      SHOW 0
+      LASTSEL 0
+      BYPASS 0 0 0
+      FLOATPOS 0 0 0 0
+    >
+  >
+  <TRACK
+    NAME loop
+    PEAKCOL 16576
+    BEAT -1
+    TRACKHEIGHT 0 0 0
+    CHANMODE 0
+    TRACKTYPE 0
+    FOLDERDEPTH 0
+    VOLPAN 1 0 1 -1
+    MUTESOLO 0 0 0
+    TRACKGROUP 0
+    IPLUGINSTATE 0 0 0 0 0 0
+    <FXCHAIN
+      SHOW 0
+      LASTSEL 0
+      BYPASS 0 0 0
+      FLOATPOS 0 0 0 0
+    >
+    <ITEM
+      POSITION 0
+      NAME loop
+      SOFFS 0
+      LENGTH 2
+      VOLPAN 1 0 1 -1
+      FADEIN 0 0 0 1 0 0 0
+      FADEOUT 0 0 0 1 0 0 0
+      MUTE 0
+      <SOURCE WAVE
+        FILE <TMP>/loop.wav
+      >
+    >
+    <ITEM
+      POSITION 2
+      NAME loop
+      SOFFS 0
+      LENGTH 2
+      VOLPAN 1 0 1 -1
+      FADEIN 0 0 0 1 0 0 0
+      FADEOUT 0 0 0 1 0 0 0
+      MUTE 0
+      <SOURCE WAVE
+        FILE <TMP>/loop.wav
+      >
+    >
+    <ITEM
+      POSITION 4
+      NAME loop
+      SOFFS 0
+      LENGTH 2
+      VOLPAN 1 0 1 -1
+      FADEIN 0 0 0 1 0 0 0
+      FADEOUT 0 0 0 1 0 0 0
+      MUTE 0
+      <SOURCE WAVE
+        FILE <TMP>/loop.wav
+      >
+    >
+    <ITEM
+      POSITION 6
+      NAME loop
+      SOFFS 0
+      LENGTH 2
+      VOLPAN 1 0 1 -1
+      FADEIN 0 0 0 1 0 0 0
+      FADEOUT 0 0 0 1 0 0 0
+      MUTE 0
+      <SOURCE WAVE
+        FILE <TMP>/loop.wav
+      >
+    >
+  >
+>

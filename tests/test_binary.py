@@ -10,19 +10,21 @@ from acid2reaper.binary.fingerprint import detect_fingerprint
 from acid2reaper.binary.riff import parse_riff_tree
 from acid2reaper.binary.wave64 import (
     EVENT_LIST_FORM_GUID,
+    MAX_EVENT_TICKS,
     SOURCE_ACID_GUID,
     extract_acid_wave64_timeline,
+    extract_timebase,
     iter_wave64_nodes,
     parse_wave64_tree,
+    tempo_from_usec_per_beat,
+)
+from fixturelib.offsets import (
+    SOURCE_ACID_LEAF_OFFSET,
+    SOURCE_ACID_PAYLOAD_OFFSET,
+    SOURCE_TEMPO_OFFSET,
 )
 
 FIXTURES = Path(__file__).resolve().parent / "fixtures"
-
-# Offset of the cached source "acid" chunk payload inside the ACID 3 fixture,
-# derived from the parsed tree: the 5c538752 leaf at 2312 plus its 24-byte
-# Wave64 header. See data/acd_signatures.json -> wave64_layout.
-SOURCE_ACID_PAYLOAD_OFFSET = 2336
-SOURCE_TEMPO_OFFSET = SOURCE_ACID_PAYLOAD_OFFSET + 28
 
 
 def test_acid3_fingerprint_and_offsets() -> None:
@@ -86,7 +88,7 @@ def test_source_acid_chunk_is_verbatim_copy_of_source_wav_acid_chunk() -> None:
     apply directly.
     """
     raw = (FIXTURES / "DrumRollUpDemo.acd").read_bytes()
-    wav = (FIXTURES / "samples" / "acid3_extracted" / "Break Pattern c.WAV").read_bytes()
+    wav = (FIXTURES / "samples" / "Break Pattern c.WAV").read_bytes()
 
     wav_acid = None
     offset = 12
@@ -137,7 +139,7 @@ def test_source_loop_absent_when_chunk_guid_missing() -> None:
     raw = bytearray((FIXTURES / "DrumRollUpDemo.acd").read_bytes())
     # Flip one byte of the leaf's GUID; the enclosing list form GUID is untouched
     # so chunk sizes and the rest of the tree stay valid.
-    raw[2312] ^= 0xFF
+    raw[SOURCE_ACID_LEAF_OFFSET] ^= 0xFF
     timeline = extract_acid_wave64_timeline(bytes(raw))
     assert timeline is not None
     assert timeline.tracks[0].source_loop is None
@@ -161,3 +163,121 @@ def test_wave64_rejects_chunk_past_container_end() -> None:
     raw = bytearray((FIXTURES / "DrumRollUpDemo.acd").read_bytes())
     raw[56:64] = (len(raw) + 1).to_bytes(8, "little")
     assert parse_wave64_tree(bytes(raw)) is None
+
+
+def test_source_loop_carries_acid_flags_and_gated_root_note(drum_roll_bytes: bytes) -> None:
+    """Flags come through; the root note does not, because its flag bit is clear."""
+    timeline = extract_acid_wave64_timeline(drum_roll_bytes)
+    source_loop = timeline.tracks[0].source_loop
+    assert source_loop is not None
+    assert source_loop.flags == 0
+    assert source_loop.one_shot is False
+    # The chunk stores root_note 0x3C with flags == 0, so the value is a default
+    # rather than a real root and must not be surfaced.
+    assert source_loop.root_note is None
+
+
+def test_timebase_record_is_the_tempo_source(drum_roll_bytes: bytes) -> None:
+    """The 946739be record carries PPQ and tempo as microseconds per beat."""
+    root = parse_wave64_tree(drum_roll_bytes)
+    timebase = extract_timebase(drum_roll_bytes, root)
+    assert timebase is not None
+    assert timebase.ppq == 24576
+    assert timebase.usec_per_beat == 500_000
+    assert timebase.tempo_bpm == 120.0
+    # This build zeroes the meter here and keeps it in the project record.
+    assert timebase.time_sig_num is None
+    assert timebase.time_sig_den is None
+
+
+@pytest.mark.parametrize(
+    "usec_per_beat, expected",
+    [
+        (500_000, 120.0),
+        (326_087, 184.0),
+        (337_079, 178.0),
+        (612_245, 98.0),
+        (413_793, 145.0),
+        (750_000, 80.0),
+        (698_487, 85.9),
+        (332_410, 180.5),
+        (764_331, 78.5),
+        (402_685, 149.0),
+    ],
+)
+def test_tempo_recovered_from_rounded_usec_per_beat(usec_per_beat: int, expected: float) -> None:
+    """
+    ACID stores a rounded integer, so 60e6/337079 is 177.99982, not 178.
+
+    Recovering the simplest decimal that re-encodes to the same integer puts the
+    tempo the user typed back in the REAPER tempo box.
+    """
+    recovered = tempo_from_usec_per_beat(usec_per_beat)
+    assert recovered == expected
+    assert round(60_000_000 / recovered) == usec_per_beat
+
+
+def test_project_time_signature_is_decoded(drum_roll_bytes: bytes) -> None:
+    """
+    Regression: the meter used to be unreachable.
+
+    It was read as two uint32 candidates, which for a 4/4 project are 0 and
+    262148 -- both outside the 1..32 gate -- so every project silently fell back
+    to 4/4 regardless of its real meter. It is a uint16 pair.
+    """
+    timeline = extract_acid_wave64_timeline(drum_roll_bytes)
+    assert (timeline.time_sig_num, timeline.time_sig_den) == (4, 4)
+
+
+def test_recovers_from_an_unbackfilled_root_size(drum_roll_bytes: bytes) -> None:
+    """A root size left at the bare header length must not reject the project."""
+    raw = bytearray(drum_roll_bytes)
+    struct.pack_into("<Q", raw, 16, 24)
+    root = parse_wave64_tree(bytes(raw))
+    assert root is not None
+    assert extract_acid_wave64_timeline(bytes(raw)) is not None
+
+
+def test_oversized_root_size_is_still_rejected(drum_roll_bytes: bytes) -> None:
+    """Only the too-small case is recoverable; a size past EOF stays a failure."""
+    raw = bytearray(drum_roll_bytes)
+    struct.pack_into("<Q", raw, 16, len(raw) + 4096)
+    assert parse_wave64_tree(bytes(raw)) is None
+
+
+def test_tempo_recovery_keeps_genuinely_odd_tempos_intact() -> None:
+    """Snapping must not invent a round number where the author had none."""
+    recovered = tempo_from_usec_per_beat(673_252)
+    assert recovered == pytest.approx(89.11967584203241)
+    assert round(60_000_000 / recovered) == 673_252
+
+
+def test_event_positions_are_signed(drum_roll_bytes: bytes) -> None:
+    """
+    ACID lets an event sit left of bar 1, and stores that as a negative int64.
+
+    Read as unsigned, a position of -41026 ticks became 1.8e19 and placed the
+    clip roughly ten million years into the project. A real corpus file does
+    exactly this.
+    """
+    raw = bytearray(drum_roll_bytes)
+    root = parse_wave64_tree(bytes(raw))
+    event = next(
+        n for n in iter_wave64_nodes(root) if n.form_guid is None and n.payload_size == 112
+    )
+    struct.pack_into("<q", raw, event.payload_offset + 0x10, -41026)
+    timeline = extract_acid_wave64_timeline(bytes(raw))
+    assert timeline.tracks[0].events[0].position_ticks == -41026
+
+
+def test_absurd_event_lengths_are_rejected(drum_roll_bytes: bytes) -> None:
+    """A length of days is a bad decode, not a long song."""
+    raw = bytearray(drum_roll_bytes)
+    root = parse_wave64_tree(bytes(raw))
+    event = next(
+        n for n in iter_wave64_nodes(root) if n.form_guid is None and n.payload_size == 112
+    )
+    before = len(extract_acid_wave64_timeline(bytes(raw)).tracks[0].events)
+    struct.pack_into("<q", raw, event.payload_offset + 0x18, MAX_EVENT_TICKS + 1)
+    after = len(extract_acid_wave64_timeline(bytes(raw)).tracks[0].events)
+    assert after == before - 1

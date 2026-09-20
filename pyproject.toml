@@ -4,7 +4,7 @@ build-backend = "setuptools.build_meta"
 
 [project]
 name = "acid2reaper"
-version = "0.1.3"
+version = "0.2.0"
 description = "ACID2Reaper — first public beta: convert Sonic Foundry / Sony / MAGIX ACID projects to Cockos REAPER (.rpp)."
 readme = "README.md"
 license = "CC-BY-4.0"
@@ -49,10 +49,41 @@ where = ["src"]
 acid2reaper = ["data/*.json"]
 
 [project.optional-dependencies]
-dev = ["pytest>=7.0", "build>=1.2"]
+dev = ["pytest>=7.0", "pytest-cov>=4.0", "ruff>=0.5", "build>=1.2"]
 ole = ["olefile>=0.46"]
 pyinstaller = ["pyinstaller>=6.0", "pillow>=9.0"]
 
 [tool.pytest.ini_options]
-pythonpath = ["src"]
+pythonpath = ["src", "tests"]
 testpaths = ["tests"]
+markers = [
+  "corpus: converts a local directory of real ACID projects (opt-in: ACID2REAPER_CORPUS_DIR)",
+  "reaper: drives a local REAPER install (opt-in: ACID2REAPER_REAPER_ORACLE=1)",
+  "network: reaches the public internet (opt-in: ACID2REAPER_ALLOW_NETWORK=1)",
+  "slow: takes more than a second",
+]
+
+[tool.coverage.run]
+source = ["acid2reaper"]
+omit = ["*/ui/*"]
+
+[tool.ruff]
+line-length = 100
+target-version = "py39"
+
+[tool.ruff.lint]
+# Correctness and import hygiene, not house style: this is an existing codebase
+# and a wholesale reformat would bury the behaviour changes it ships with.
+select = ["E4", "E7", "E9", "F", "I", "B", "UP"]
+ignore = [
+  # The project supports Python 3.9. These rewrites target 3.10+ syntax that is
+  # only safe inside annotations, and the dataclasses here are evaluated at
+  # runtime, so applying them wholesale would break the minimum version.
+  "UP006",
+  "UP007",
+  "UP035",
+  "UP045",
+]
+
+[tool.ruff.lint.isort]
+known-first-party = ["acid2reaper", "fixturelib"]

@@ -13,7 +13,10 @@
       "verified_constants": {
         "tempo_bpm_double_le_offset": 88,
         "tempo_value": 120.0,
-        "sample_rate_hz_u32_le_offsets": [76, 912],
+        "sample_rate_hz_u32_le_offsets": [
+          76,
+          912
+        ],
         "sample_rate_value": 44100,
         "source_acid_chunk_offset": 2336,
         "source_tempo_bpm_float32_le_offset": 2364,
@@ -21,7 +24,9 @@
         "source_beats_u32_le_offset": 2356,
         "source_beats_value": 4
       },
-      "acid_pro_major_guess": [3],
+      "acid_pro_major_guess": [
+        3
+      ],
       "parser_family": "riff_lower_guid_shell"
     }
   ],
@@ -34,8 +39,14 @@
         "guid_at_offset_24": "ea1c076d-efa3-4c78-9057-7f79ee252aae"
       },
       "fields": {
-        "tempo_bpm": { "encoding": "float64_le", "offset": 88 },
-        "sample_rate_hz_primary": { "encoding": "uint32_le", "offset": 76 }
+        "tempo_bpm": {
+          "encoding": "float64_le",
+          "offset": 88
+        },
+        "sample_rate_hz_primary": {
+          "encoding": "uint32_le",
+          "offset": 76
+        }
       }
     },
     {
@@ -51,13 +62,17 @@
     {
       "id": "ole_compound",
       "description": "Microsoft OLE compound file (CFBF). Some Windows-era media apps used structured storage.",
-      "match": { "magic_hex": "D0CF11E0A1B11AE1" },
+      "match": {
+        "magic_hex": "D0CF11E0A1B11AE1"
+      },
       "fields": {}
     },
     {
       "id": "zip_bundle",
       "description": "ACD-ZIP (PK zip) bundle; inner .acd may match any family above.",
-      "match": { "magic_hex": "504B0304" },
+      "match": {
+        "magic_hex": "504B0304"
+      },
       "fields": {}
     }
   ],
@@ -67,8 +82,11 @@
     "notes": [
       "Chunk header is a 16-byte GUID stored little-endian (uuid bytes_le) followed by a little-endian uint64 size that includes the 24-byte header. Siblings are padded to 8-byte boundaries.",
       "A 'list' chunk's payload opens with a 16-byte form GUID; its children follow. Several form GUIDs repeat as the GUID of their single leaf child.",
-      "Leaf payloads in the track subtree open with an 8-byte record header: uint32 = 8 + content byte count, then uint32 reserved (0 in the fixture). Observed values: 32 for a 32-byte payload, 12 for a 16-byte padded payload.",
-      "Every GUID below was read from the fixture's own bytes; no GUIDs are synthesized. 'decoded' entries are the only ones this converter interprets."
+      "Leaf payloads in the track subtree open with an 8-byte record header: uint32 = 8 + content byte count, then an int32 record type/version tag. The tag is NOT a reserved zero; observed values are 0x00010001 (project record), -98 (track record), -100 (event record) and 0 (cached acid chunk).",
+      "Event positions and lengths are SIGNED int64. ACID allows an event to sit left of bar 1, which is stored as a negative position; reading the field as uint64 turns -41026 ticks into 1.8e19.",
+      "Some builds leave the root chunk size at the bare header length (24) instead of backfilling it after writing. The chunk stream is intact, so the file extent is used instead.",
+      "Every GUID below was read from real project bytes; no GUIDs are synthesized. 'decoded' entries are the only ones this converter interprets.",
+      "Validated against 245 real projects spanning roughly 2005-2008 and 30 distinct build layouts; their structural fingerprints are committed in tests/fixtures/corpus_manifest.json."
     ],
     "chunks": [
       {
@@ -92,20 +110,38 @@
       {
         "guid": "b28f2d5a-230f-11d2-86af-00c04f8edb8a",
         "kind": "leaf",
-        "role": "Project record: sample rate, tempo, time signature, and PPQ.",
+        "role": "Project record: sample rate, PPQ, and a time-signature pair. Its float64 at payload offset 24 is a template default, NOT the project tempo.",
         "decoded": true,
         "fields": {
-          "sample_rate_hz": { "encoding": "uint32_le", "payload_offset": 12, "value": 44100 },
-          "tempo_bpm": { "encoding": "float64_le", "payload_offset": 24, "value": 120.0 },
-          "ppq": { "encoding": "uint32_le", "payload_offset": 44, "value": 24576 }
+          "sample_rate_hz": {
+            "encoding": "uint32_le",
+            "payload_offset": 12,
+            "value": 44100
+          },
+          "ppq": {
+            "encoding": "uint32_le",
+            "payload_offset": 44,
+            "value": 24576
+          },
+          "time_signature": {
+            "encoding": "uint16_le pair (denominator, numerator)",
+            "payload_offset": 40,
+            "value": [
+              4,
+              4
+            ],
+            "note": "Read as a uint16 pair. It was previously read as two uint32 candidates at offsets 36 and 40, which for a 4/4 project are 0 and 262148 -- both outside the 1..32 gate -- so the field was unreachable and every project silently fell back to 4/4."
+          }
         },
         "unverified_fields": {
-          "time_signature": {
-            "encoding": "uint16_le pair",
-            "payload_offset": 40,
-            "raw_uint32_le": 262148,
-            "values": [4, 4],
-            "note": "Both halves are 4 in the only sample, so numerator/denominator order cannot be determined. The parser reads uint32 candidates at payload offsets 36 and 40, rejects them with a 1..32 plausibility gate, and falls back to 4/4."
+          "tempo_bpm_default": {
+            "encoding": "float64_le",
+            "payload_offset": 24,
+            "value": 120.0,
+            "note": "Reads exactly 120.0 in all 245 real projects examined, including projects authored at 98, 145, 178 and 184 BPM. Treated as a template default and used only when a project has no timebase record at all."
+          },
+          "meter_pair_order": {
+            "note": "Both halves are 4 in every observed project, so the slot order is undetermined for pairs where both are powers of two. For 3/4, 5/4, 6/8, 7/8 and 12/8 only one half can legally be a denominator, so those resolve regardless. The CLI exposes --time-sig-order and --time-sig."
           }
         }
       },
@@ -118,7 +154,7 @@
       {
         "guid": "b28f2d5d-230f-11d2-86af-00c04f8edb8a",
         "kind": "leaf",
-        "role": "Project-level record (256-byte payload); contents undecoded.",
+        "role": "Project-level media pool entry; carries a UTF-16LE media path. Present in newer builds alongside the per-track bf0a0344 reference.",
         "decoded": false
       },
       {
@@ -175,8 +211,14 @@
         "role": "Timeline event record: start position and length in PPQ ticks.",
         "decoded": true,
         "fields": {
-          "position_ticks": { "encoding": "uint64_le", "payload_offset": 16 },
-          "length_ticks": { "encoding": "uint64_le", "payload_offset": 24 }
+          "position_ticks": {
+            "encoding": "uint64_le",
+            "payload_offset": 16
+          },
+          "length_ticks": {
+            "encoding": "uint64_le",
+            "payload_offset": 24
+          }
         }
       },
       {
@@ -185,25 +227,20 @@
         "role": "Cached copy of the source media file's standard ACID 'acid' RIFF chunk, held per track. The 24 payload bytes after the 8-byte record header are byte-identical to the source WAV's own 'acid' chunk, which is how the cached loop tempo is located.",
         "decoded": true,
         "fields": {
-          "beats": { "encoding": "uint32_le", "payload_offset": 20, "value": 4 },
+          "beats": {
+            "encoding": "uint32_le",
+            "payload_offset": 20,
+            "value": 4
+          },
           "source_tempo_bpm": {
             "encoding": "float32_le",
             "payload_offset": 28,
             "value": 139.5569610595703
-          }
-        },
-        "unverified_fields": {
+          },
           "flags": {
             "encoding": "uint32_le",
-            "payload_offset": 8,
-            "value": 0,
-            "note": "Standard 'acid' chunk flag word (one-shot / root-note bits). Zero in the only sample, so no flag meaning is inferred and one-shot sources are not special-cased."
-          },
-          "time_signature": {
-            "encoding": "uint16_le pair",
-            "payload_offset": 24,
-            "values": [4, 4],
-            "note": "Both halves are 4, so numerator/denominator order is undetermined; parsed but not exported."
+            "payload_offset": "acid chunk +0",
+            "note": "Publicly specified: 0x01 one-shot, 0x02 root note set, 0x04 stretch, 0x08 disk-based, 0x10 set by Acidizer. Only 0x01 is acted on -- the fixture has flags == 0 yet ACID beat-maps that loop, so a clear 0x04 tells us nothing. 97 of 245 corpus projects contain a one-shot source."
           }
         }
       },
@@ -282,8 +319,55 @@
       {
         "guid": "946739be-391a-4384-8785-38bda35f409a",
         "kind": "leaf_and_form",
-        "role": "Final project-level list and leaf sharing one GUID (24-byte payload); contents undecoded.",
-        "decoded": false
+        "role": "Project timebase record: PPQ, tempo as microseconds per beat, and a time-signature pair. This is where the tempo the user set actually lives.",
+        "decoded": true,
+        "fields": {
+          "record_bytes": {
+            "encoding": "uint32_le",
+            "payload_offset": 0,
+            "value": 20
+          },
+          "ppq": {
+            "encoding": "uint32_le",
+            "payload_offset": 4,
+            "value": 24576
+          },
+          "usec_per_beat": {
+            "encoding": "uint32_le",
+            "payload_offset": 8,
+            "note": "tempo_bpm = 60000000 / usec_per_beat. The stored integer is rounded, so 337079 decodes to 177.99982; the simplest decimal that re-encodes to the same integer (178.0) is recovered instead."
+          },
+          "time_signature": {
+            "encoding": "uint16_le pair (denominator, numerator)",
+            "payload_offset": 16,
+            "note": "Zeroed by ACID 3-era builds, which keep the meter in the project record instead."
+          }
+        },
+        "unverified_fields": {
+          "flags": {
+            "encoding": "uint32_le",
+            "payload_offset": 12,
+            "value": [
+              57,
+              59
+            ],
+            "note": "Two values observed across the corpus; meaning unknown, not interpreted."
+          }
+        },
+        "corroboration": "One corpus project has three separately rendered mixdowns, all 293.9 s, over a timeline of exactly 480.0 beats, which is 98.00 BPM; this record decodes to 612245 us/beat = 98.0. Filenames that happen to state a tempo (184 BPM, 178) agree but were not used as evidence."
+      },
+      {
+        "guid": "bf0a0344-f8a7-47f4-88cb-a63c7756ba9e",
+        "kind": "leaf_and_form",
+        "role": "Per-track media reference used by newer ACID builds, which leave the 4d6c0749 track record without a path.",
+        "decoded": true,
+        "fields": {
+          "media_path": {
+            "encoding": "UTF-16LE, NUL-terminated",
+            "note": "Located by scanning the leaf; the surrounding record layout is undecoded."
+          }
+        },
+        "note": "Before this leaf was read, 31 of 244 corpus projects resolved zero media paths and every track in them collapsed onto a single fallback file."
       }
     ]
   }
