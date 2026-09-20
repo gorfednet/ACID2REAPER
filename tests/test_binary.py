@@ -15,14 +15,13 @@ from acid2reaper.binary.wave64 import (
     iter_wave64_nodes,
     parse_wave64_tree,
 )
+from fixturelib.offsets import (
+    SOURCE_ACID_LEAF_OFFSET,
+    SOURCE_ACID_PAYLOAD_OFFSET,
+    SOURCE_TEMPO_OFFSET,
+)
 
 FIXTURES = Path(__file__).resolve().parent / "fixtures"
-
-# Offset of the cached source "acid" chunk payload inside the ACID 3 fixture,
-# derived from the parsed tree: the 5c538752 leaf at 2312 plus its 24-byte
-# Wave64 header. See data/acd_signatures.json -> wave64_layout.
-SOURCE_ACID_PAYLOAD_OFFSET = 2336
-SOURCE_TEMPO_OFFSET = SOURCE_ACID_PAYLOAD_OFFSET + 28
 
 
 def test_acid3_fingerprint_and_offsets() -> None:
@@ -86,7 +85,7 @@ def test_source_acid_chunk_is_verbatim_copy_of_source_wav_acid_chunk() -> None:
     apply directly.
     """
     raw = (FIXTURES / "DrumRollUpDemo.acd").read_bytes()
-    wav = (FIXTURES / "samples" / "acid3_extracted" / "Break Pattern c.WAV").read_bytes()
+    wav = (FIXTURES / "samples" / "Break Pattern c.WAV").read_bytes()
 
     wav_acid = None
     offset = 12
@@ -137,7 +136,7 @@ def test_source_loop_absent_when_chunk_guid_missing() -> None:
     raw = bytearray((FIXTURES / "DrumRollUpDemo.acd").read_bytes())
     # Flip one byte of the leaf's GUID; the enclosing list form GUID is untouched
     # so chunk sizes and the rest of the tree stay valid.
-    raw[2312] ^= 0xFF
+    raw[SOURCE_ACID_LEAF_OFFSET] ^= 0xFF
     timeline = extract_acid_wave64_timeline(bytes(raw))
     assert timeline is not None
     assert timeline.tracks[0].source_loop is None

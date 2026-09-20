@@ -6,6 +6,7 @@ from pathlib import Path
 import pytest
 
 from acid2reaper.cli import convert
+from fixturelib.offsets import SOURCE_ACID_LEAF_OFFSET
 from rpp import loads
 
 
@@ -58,10 +59,10 @@ def test_drum_roll_acd_to_rpp(tmp_path: Path) -> None:
     assert root.tag == "REAPER_PROJECT"
 
 
-def test_acd_zip_to_rpp(tmp_path: Path) -> None:
-    z = FIXTURES / "DrumRollUpDemo.acd-zip"
+def test_acd_zip_to_rpp(tmp_path: Path, isolated_acd_zip: Path) -> None:
+    # extract_acd_zip() unpacks next to the archive, so convert a tmp_path copy.
     out = tmp_path / "zip_out.rpp"
-    convert(z, out)
+    convert(isolated_acd_zip, out)
     text = out.read_text(encoding="utf-8")
     root = loads(text)
     assert root.tag == "REAPER_PROJECT"
@@ -119,7 +120,7 @@ def test_playrate_falls_back_to_unity_without_cached_source_tempo(tmp_path: Path
     raw = bytearray((FIXTURES / "DrumRollUpDemo.acd").read_bytes())
     # Same single-byte GUID edit as tests/test_binary.py: removes the 5c538752
     # leaf without disturbing chunk sizes.
-    raw[2312] ^= 0xFF
+    raw[SOURCE_ACID_LEAF_OFFSET] ^= 0xFF
     acd = tmp_path / "no_source_tempo.acd"
     acd.write_bytes(bytes(raw))
 
@@ -188,7 +189,7 @@ def test_acd_event_length_wins_over_colocated_wav_duration(tmp_path: Path) -> No
     work = tmp_path / "project"
     work.mkdir()
     shutil.copy(FIXTURES / "DrumRollUpDemo.acd", work / "DrumRollUpDemo.acd")
-    src_wav = FIXTURES / "samples" / "acid3_extracted" / "Break Pattern c.WAV"
+    src_wav = FIXTURES / "samples" / "Break Pattern c.WAV"
     shutil.copy(src_wav, work / "Break Pattern c.WAV")
     with wave.open(str(work / "Break Pattern c.WAV"), "rb") as wf:
         frames = wf.getnframes()

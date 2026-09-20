@@ -49,10 +49,24 @@ where = ["src"]
 acid2reaper = ["data/*.json"]
 
 [project.optional-dependencies]
-dev = ["pytest>=7.0", "build>=1.2"]
+dev = ["pytest>=7.0", "pytest-cov>=4.0", "ruff>=0.5", "build>=1.2"]
 ole = ["olefile>=0.46"]
 pyinstaller = ["pyinstaller>=6.0", "pillow>=9.0"]
 
 [tool.pytest.ini_options]
-pythonpath = ["src"]
+pythonpath = ["src", "tests"]
 testpaths = ["tests"]
+markers = [
+  "corpus: converts a local directory of real ACID projects (opt-in: ACID2REAPER_CORPUS_DIR)",
+  "reaper: drives a local REAPER install (opt-in: ACID2REAPER_REAPER_ORACLE=1)",
+  "network: reaches the public internet (opt-in: ACID2REAPER_ALLOW_NETWORK=1)",
+  "slow: takes more than a second",
+]
+
+[tool.coverage.run]
+source = ["acid2reaper"]
+omit = ["*/ui/*"]
+
+[tool.ruff]
+line-length = 100
+target-version = "py39"
