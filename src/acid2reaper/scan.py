@@ -54,7 +54,15 @@ def _ascii_audio_paths(data: bytes) -> List[Tuple[int, str]]:
 
 
 def _is_foreign_absolute(raw: str) -> bool:
-    """True for a Windows drive-letter or UNC path seen from a non-Windows host."""
+    """
+    True for a Windows drive-letter or UNC path that this platform cannot read.
+
+    On Windows such a path is simply absolute and needs no special handling, so
+    the check is deliberately platform-aware: ``Path.is_absolute`` already
+    returns True there and the caller keeps its normal behaviour.
+    """
+    if Path(raw).is_absolute():
+        return False
     text = raw.strip()
     if len(text) >= 3 and text[1] == ":" and text[0].isalpha() and text[2] in "\\/":
         return True

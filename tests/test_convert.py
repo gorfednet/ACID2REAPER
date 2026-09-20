@@ -1,5 +1,6 @@
 from __future__ import annotations
 
+import os
 import re
 import struct
 from pathlib import Path
@@ -334,6 +335,9 @@ def test_clip_entirely_before_bar_one_is_dropped_and_reported(tmp_path: Path) ->
     assert "Dropped clips that lay entirely before the start" in text
 
 
+@pytest.mark.skipif(
+    os.name == "nt", reason="a drive-letter path is native here, not foreign"
+)
 def test_windows_absolute_paths_are_not_joined_to_the_project_dir(tmp_path: Path) -> None:
     """
     A drive-letter path is absolute on Windows but relative to pathlib on POSIX.
@@ -345,3 +349,11 @@ def test_windows_absolute_paths_are_not_joined_to_the_project_dir(tmp_path: Path
     resolved = _resolve_clip_path("C:\\audio storage\\loop.wav", tmp_path / "proj.acd", [])
     assert resolved == tmp_path / "loop.wav"
     assert "C:" not in str(resolved)
+
+
+def test_foreign_absolute_detection_is_platform_aware() -> None:
+    """On Windows a drive-letter path is native and must not be rewritten."""
+    from acid2reaper.scan import _is_foreign_absolute
+
+    assert _is_foreign_absolute("loop.wav") is False
+    assert _is_foreign_absolute("C:\\audio\\loop.wav") is (os.name != "nt")
