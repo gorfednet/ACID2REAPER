@@ -24,9 +24,31 @@ def read_pyproject_version(root: Path) -> str:
     return m.group(1)
 
 
+def read_package_version(root: Path) -> str:
+    text = (root / "src" / "acid2reaper" / "_version.py").read_text(encoding="utf-8")
+    m = re.search(r'^__version__\s*=\s*"([^"]+)"', text, re.MULTILINE)
+    if not m:
+        print("verify_changelog: could not find __version__ in _version.py", file=sys.stderr)
+        sys.exit(1)
+    return m.group(1)
+
+
 def main() -> int:
     root = _project_root()
     ver = read_pyproject_version(root)
+
+    # The version is duplicated in two files. Only pyproject was ever checked,
+    # so a stale _version.py would ship a wheel that reports the wrong version
+    # from --version and from the packaged GUI.
+    package_ver = read_package_version(root)
+    if package_ver != ver:
+        print(
+            f"verify_changelog: version mismatch -- pyproject.toml says {ver}, "
+            f"src/acid2reaper/_version.py says {package_ver}.",
+            file=sys.stderr,
+        )
+        return 1
+
     changelog = (root / "CHANGELOG.md").read_text(encoding="utf-8")
     # Keep a Changelog style: ## [0.1.0]
     if f"## [{ver}]" not in changelog:
@@ -36,7 +58,7 @@ def main() -> int:
             file=sys.stderr,
         )
         return 1
-    print(f"verify_changelog: OK (CHANGELOG documents [{ver}])")
+    print(f"verify_changelog: OK (version {ver} consistent, CHANGELOG documents [{ver}])")
     return 0
 
 
