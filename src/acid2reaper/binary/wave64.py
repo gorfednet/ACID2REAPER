@@ -17,7 +17,6 @@ import uuid
 from dataclasses import dataclass
 from typing import Iterator, Optional, Tuple
 
-from .meter import DEN_NUM, resolve_meter
 from .acid_chunk import (
     ACID_CHUNK_BYTES,
     BEATS_MAX,
@@ -28,7 +27,7 @@ from .acid_chunk import (
     AcidChunk,
     parse_acid_chunk,
 )
-
+from .meter import DEN_NUM, resolve_meter
 
 RIFF_GUID = uuid.UUID("66666972-912e-11cf-a5d6-28db04c10000")
 LIST_GUID = uuid.UUID("7473696c-912f-11cf-a5d6-28db04c10000")
@@ -64,7 +63,7 @@ class Wave64Node:
     payload_offset: int
     payload_size: int
     form_guid: Optional[uuid.UUID] = None
-    children: Tuple["Wave64Node", ...] = ()
+    children: Tuple[Wave64Node, ...] = ()
 
 
 @dataclass(frozen=True)
@@ -314,6 +313,10 @@ def _source_loop_from_chunk(chunk: AcidChunk) -> AcidSourceLoop:
     )
 
 
+#: Positions and lengths beyond this are a bad decode, not a long song: even at
+#: the slowest tempo we accept, this is well over a day of audio.
+MAX_EVENT_TICKS = 24 * 60 * 400 * 24576
+
 _TIMEBASE_RECORD_BYTES = 20
 _TIMEBASE_PPQ = 4
 _TIMEBASE_USEC_PER_BEAT = 8
@@ -463,9 +466,15 @@ def extract_acid_wave64_timeline(
                     continue
                 if node.payload_size < 32:
                     continue
-                position, length = struct.unpack_from("<QQ", data, node.payload_offset + 0x10)
-                if length > 0:
-                    events.append(AcidEventTicks(position, length))
+                # Signed, not unsigned. An event dragged left of bar 1 is stored
+                # as a negative position; reading it as uint64 turned -41026
+                # ticks into 1.8e19 and put the clip 10 million years in.
+                position, length = struct.unpack_from("<qq", data, node.payload_offset + 0x10)
+                if length <= 0 or length > MAX_EVENT_TICKS:
+                    continue
+                if position > MAX_EVENT_TICKS or position < -MAX_EVENT_TICKS:
+                    continue
+                events.append(AcidEventTicks(position, length))
         # Keep tracks with no events. Dropping them silently renumbered every
         # track after the gap, and made an otherwise-valid empty project look
         # like an undecodable file.

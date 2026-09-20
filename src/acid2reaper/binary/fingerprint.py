@@ -8,9 +8,9 @@ GUIDs, and RIFF size coherence so downstream code can pick a parser strategy.
 from __future__ import annotations
 
 import json
+import struct
 import uuid
 from dataclasses import dataclass
-import struct
 from pathlib import Path
 from typing import Any, Dict, Optional
 

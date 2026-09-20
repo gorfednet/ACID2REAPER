@@ -18,7 +18,7 @@ class RiffChunk:
     offset: int
     size: int
     data_offset: int
-    children: List["RiffChunk"] = field(default_factory=list)
+    children: List[RiffChunk] = field(default_factory=list)
     form_fourcc: Optional[str] = None
 
 

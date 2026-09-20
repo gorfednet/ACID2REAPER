@@ -10,6 +10,7 @@ from acid2reaper.binary.fingerprint import detect_fingerprint
 from acid2reaper.binary.riff import parse_riff_tree
 from acid2reaper.binary.wave64 import (
     EVENT_LIST_FORM_GUID,
+    MAX_EVENT_TICKS,
     SOURCE_ACID_GUID,
     extract_acid_wave64_timeline,
     extract_timebase,
@@ -249,3 +250,34 @@ def test_tempo_recovery_keeps_genuinely_odd_tempos_intact() -> None:
     recovered = tempo_from_usec_per_beat(673_252)
     assert recovered == pytest.approx(89.11967584203241)
     assert round(60_000_000 / recovered) == 673_252
+
+
+def test_event_positions_are_signed(drum_roll_bytes: bytes) -> None:
+    """
+    ACID lets an event sit left of bar 1, and stores that as a negative int64.
+
+    Read as unsigned, a position of -41026 ticks became 1.8e19 and placed the
+    clip roughly ten million years into the project. A real corpus file does
+    exactly this.
+    """
+    raw = bytearray(drum_roll_bytes)
+    root = parse_wave64_tree(bytes(raw))
+    event = next(
+        n for n in iter_wave64_nodes(root) if n.form_guid is None and n.payload_size == 112
+    )
+    struct.pack_into("<q", raw, event.payload_offset + 0x10, -41026)
+    timeline = extract_acid_wave64_timeline(bytes(raw))
+    assert timeline.tracks[0].events[0].position_ticks == -41026
+
+
+def test_absurd_event_lengths_are_rejected(drum_roll_bytes: bytes) -> None:
+    """A length of days is a bad decode, not a long song."""
+    raw = bytearray(drum_roll_bytes)
+    root = parse_wave64_tree(bytes(raw))
+    event = next(
+        n for n in iter_wave64_nodes(root) if n.form_guid is None and n.payload_size == 112
+    )
+    before = len(extract_acid_wave64_timeline(bytes(raw)).tracks[0].events)
+    struct.pack_into("<q", raw, event.payload_offset + 0x18, MAX_EVENT_TICKS + 1)
+    after = len(extract_acid_wave64_timeline(bytes(raw)).tracks[0].events)
+    assert after == before - 1

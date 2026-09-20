@@ -21,7 +21,7 @@ from .containers import sniff_project_bytes
 from .exceptions import Acid2ReaperError
 from .export_rpp import write_rpp
 from .scan import parse_acid_project
-from .security import validate_is_dir, validate_user_path, safe_output_path
+from .security import safe_output_path, validate_is_dir, validate_user_path
 
 
 def _build_parser() -> argparse.ArgumentParser:

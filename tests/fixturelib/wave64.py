@@ -21,7 +21,7 @@ from __future__ import annotations
 
 import struct
 import uuid
-from dataclasses import dataclass, field
+from dataclasses import dataclass
 from typing import Mapping, Optional, Sequence, Tuple
 
 from acid2reaper.binary.acid_chunk import AcidChunk, pack_acid_chunk

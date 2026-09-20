@@ -10,7 +10,6 @@ the value would land somewhere the real file does not have it and these fail.
 
 from __future__ import annotations
 
-import struct
 from typing import List
 
 import pytest
@@ -21,7 +20,6 @@ from acid2reaper.binary.wave64 import (
     PROJECT_GUID,
     SOURCE_ACID_GUID,
     TIMEBASE_FORM_GUID,
-    Wave64Node,
     extract_acid_wave64_timeline,
     extract_timebase,
     iter_wave64_nodes,

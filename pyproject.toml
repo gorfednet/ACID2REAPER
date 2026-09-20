@@ -4,7 +4,7 @@ build-backend = "setuptools.build_meta"
 
 [project]
 name = "acid2reaper"
-version = "0.1.3"
+version = "0.2.0"
 description = "ACID2Reaper — first public beta: convert Sonic Foundry / Sony / MAGIX ACID projects to Cockos REAPER (.rpp)."
 readme = "README.md"
 license = "CC-BY-4.0"
@@ -70,3 +70,20 @@ omit = ["*/ui/*"]
 [tool.ruff]
 line-length = 100
 target-version = "py39"
+
+[tool.ruff.lint]
+# Correctness and import hygiene, not house style: this is an existing codebase
+# and a wholesale reformat would bury the behaviour changes it ships with.
+select = ["E4", "E7", "E9", "F", "I", "B", "UP"]
+ignore = [
+  # The project supports Python 3.9. These rewrites target 3.10+ syntax that is
+  # only safe inside annotations, and the dataclasses here are evaluated at
+  # runtime, so applying them wholesale would break the minimum version.
+  "UP006",
+  "UP007",
+  "UP035",
+  "UP045",
+]
+
+[tool.ruff.lint.isort]
+known-first-party = ["acid2reaper", "fixturelib"]

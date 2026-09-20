@@ -8,6 +8,80 @@ and this project adheres to [Semantic Versioning](https://semver.org/spec/v2.0.0
 Release builds run `python scripts/verify_changelog.py` so every published version
 must have a matching section below.
 
+## [0.2.0] - 2026-09-20
+
+Conversion correctness release. Running the converter over 245 real ACID projects
+spanning roughly 2005-2008 and thirty distinct build layouts exposed defects that
+a single 4/4, 120 BPM fixture could not. Output changes for essentially every
+project, so re-convert anything you converted with an earlier version.
+
+### Fixed
+
+- **Project tempo was read from the wrong field.** The float64 in the project
+  record is a template default: it reads exactly 120.0 in all 245 real projects
+  examined, including ones authored at 98, 145, 178 and 184 BPM. Every
+  conversion therefore emitted `TEMPO 120`, and because clip playrate is
+  `project_tempo / source_tempo`, stretched every clip by the wrong factor onto a
+  wrong bar grid. The tempo is now read from the `946739be` timebase record as
+  microseconds per beat. Corroborated against rendered mixdowns: one project has
+  three separate renders, all 293.9 s over exactly 480.0 beats, which is 98.00
+  BPM, and the record decodes to exactly that.
+- **Time signature was unreachable.** It was read as two uint32 candidates that
+  for a 4/4 project are 0 and 262148, both outside the plausibility gate, so
+  every project silently fell back to 4/4 regardless of its meter. It is a
+  uint16 pair.
+- **Media paths failed on newer ACID builds.** Those builds leave the track
+  record empty and put the path in a dedicated `bf0a0344` leaf, so 31 of 244
+  projects resolved zero paths and every one of their tracks collapsed onto a
+  single fallback file. Both layouts are now read; no project in the corpus
+  resolves zero paths.
+- **Event positions were read as unsigned.** ACID stores them signed, and allows
+  an event to sit left of bar 1; read as uint64, a position of -41026 ticks
+  became 1.8e19 and placed the clip about ten million years into the project.
+  Such clips are now trimmed into the take's source offset, or dropped and
+  reported if they lie entirely before the start.
+- **One-shots were stretched.** The `acid` chunk's flag word was never decoded,
+  so every source with a plausible cached tempo was resampled to the project
+  tempo -- which audibly retunes a hit. 97 of the 245 corpus projects contain a
+  one-shot source.
+- **Scientific notation could reach the output.** `format_rpp_float` used `%g`,
+  which emits `3.1059307775e+14` for extreme values; REAPER's chunk parser reads
+  plain decimals and misreads that silently.
+- **Windows absolute paths were joined onto the project directory**, producing
+  `FILE` tokens such as `/home/me/project/C:\audio\loop.wav`.
+- **Tracks with no events were dropped**, renumbering every track after the gap
+  and making an otherwise-valid empty project decode to nothing.
+- **A root size left at the bare header length rejected the whole file.** The
+  chunk stream is intact in that case, so the file extent is used instead.
+- **`media_duration` broke the CLI on Python 3.13.** It imported `aifc` at module
+  scope; `aifc` was removed in 3.13 (PEP 594), so importing the module -- and
+  with it the whole CLI -- raised `ImportError`.
+
+### Added
+
+- `--time-sig NUM/DEN` and `--time-sig-order {den-num,num-den}` to override meter
+  decoding, for the pairs where both halves are powers of two and the slot order
+  cannot be inferred.
+- Project diagnostics are written to a REAPER `NOTES` block and printed to stderr
+  with `-v`. They were fully computed before and went nowhere.
+- Items carry a `NAME`, so a project reusing one loop across several tracks is
+  readable in the arrange view.
+- `binary/acid_chunk.py`, a shared decoder and encoder for the standard `acid`
+  RIFF chunk, and `binary/meter.py` for time-signature pair resolution.
+- `acid_timing.seconds_per_tick`, isolating the unverified assumption that ACID's
+  BPM counts quarter notes under x/8 meters.
+- Test infrastructure: an ACID project and ACIDized WAV builder anchored to the
+  real fixture by byte equality, a structural `.rpp` validator, fifteen golden
+  projects covering 3/4, 5/4, 6/8, 7/8, 12/8, one-shots, multi-track and both
+  media layouts, a committed structural corpus manifest for 245 real projects,
+  an opt-in live corpus runner, and an opt-in REAPER oracle.
+- Python 3.13 in the CI matrix; coverage and lint jobs.
+
+### Changed
+
+- Documentation now distinguishes what is verified from what is not, backed by
+  the corpus rather than by a single sample.
+
 ## [0.1.3] - 2026-08-28
 
 Patch release with a user-visible timeline change: clips are now time-stretched to

@@ -14,6 +14,7 @@ from pathlib import Path
 from rpp import dumps
 from rpp.element import Element
 
+from .binary.meter import LEGAL_DENOMINATORS, MAX_NUMERATOR
 from .media_duration import media_length_seconds
 from .model import (
     PLAYRATE_MAX,
@@ -24,7 +25,6 @@ from .model import (
     FxSlot,
     MasterBus,
 )
-from .binary.meter import LEGAL_DENOMINATORS, MAX_NUMERATOR
 from .rpp_format import format_rpp_float
 from .security import sanitize_rpp_file_token
 

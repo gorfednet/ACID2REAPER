@@ -5,13 +5,13 @@ import struct
 from pathlib import Path
 
 import pytest
+from rpp import loads
 
 from acid2reaper.binary.acid_chunk import FLAG_ONE_SHOT
+from acid2reaper.binary.wave64 import iter_wave64_nodes, parse_wave64_tree
 from acid2reaper.cli import convert
 from fixturelib.offsets import SOURCE_ACID_LEAF_OFFSET, SOURCE_FLAGS_OFFSET
 from fixturelib.rpp_assert import assert_valid_rpp
-from rpp import loads
-
 
 FIXTURES = Path(__file__).resolve().parent / "fixtures"
 
@@ -289,3 +289,59 @@ def test_loops_are_still_stretched(tmp_path: Path) -> None:
     assert_valid_rpp(text)
     assert len(_playrate_lines(text)) == 15
     assert "One-shot sources left unstretched" not in text
+
+
+def test_clip_before_bar_one_is_trimmed_into_the_source_offset(tmp_path: Path) -> None:
+    """
+    REAPER has no negative item positions, so the hidden head becomes SOFFS.
+
+    A real corpus project stores an event at -41026 ticks; the audible part must
+    survive at position 0, offset into the source by the amount that was cut.
+    """
+    raw = bytearray((FIXTURES / "DrumRollUpDemo.acd").read_bytes())
+    # First event: position 0, length 98304. Move it half a length to the left.
+    root = parse_wave64_tree(bytes(raw))
+    event = next(n for n in iter_wave64_nodes(root) if n.form_guid is None and n.payload_size == 112)
+    struct.pack_into("<q", raw, event.payload_offset + 0x10, -49152)
+    acd = tmp_path / "negative.acd"
+    acd.write_bytes(bytes(raw))
+
+    out = tmp_path / "negative.rpp"
+    convert(acd, out)
+    text = out.read_text(encoding="utf-8")
+    assert_valid_rpp(text)
+
+    items = text.split("<ITEM")[1:]
+    first = items[0]
+    assert "POSITION 0" in first
+    # 49152 ticks at 120 BPM and ppq 24576 is exactly one second.
+    assert "SOFFS 1" in first
+    assert "LENGTH 1" in first
+
+
+def test_clip_entirely_before_bar_one_is_dropped_and_reported(tmp_path: Path) -> None:
+    raw = bytearray((FIXTURES / "DrumRollUpDemo.acd").read_bytes())
+    root = parse_wave64_tree(bytes(raw))
+    event = next(n for n in iter_wave64_nodes(root) if n.form_guid is None and n.payload_size == 112)
+    struct.pack_into("<q", raw, event.payload_offset + 0x10, -98304)
+    acd = tmp_path / "offscreen.acd"
+    acd.write_bytes(bytes(raw))
+
+    out = tmp_path / "offscreen.rpp"
+    convert(acd, out)
+    text = out.read_text(encoding="utf-8")
+    assert text.count("<ITEM") == 14
+    assert "Dropped clips that lay entirely before the start" in text
+
+
+def test_windows_absolute_paths_are_not_joined_to_the_project_dir(tmp_path: Path) -> None:
+    """
+    A drive-letter path is absolute on Windows but relative to pathlib on POSIX.
+
+    Joining it produced FILE tokens like "/home/me/project/C:\\audio\\loop.wav".
+    """
+    from acid2reaper.scan import _resolve_clip_path
+
+    resolved = _resolve_clip_path("C:\\audio storage\\loop.wav", tmp_path / "proj.acd", [])
+    assert resolved == tmp_path / "loop.wav"
+    assert "C:" not in str(resolved)

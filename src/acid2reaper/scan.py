@@ -23,13 +23,13 @@ from __future__ import annotations
 import math
 import re
 import struct
-from pathlib import Path
+from pathlib import Path, PureWindowsPath
 from typing import Iterable, List, Optional, Sequence, Tuple
 
 from .acid_routing import collect_plugin_and_bus_hints
 from .acid_timing import seconds_per_tick
-from .binary.meter import DEN_NUM
 from .binary.extract import extract_structured_fields
+from .binary.meter import DEN_NUM
 from .binary.wave64 import AcidSourceLoop, extract_acid_wave64_timeline
 from .containers import AUDIO_EXT
 from .model import PLAYRATE_MAX, PLAYRATE_MIN, AcidClip, AcidProject, AcidTrack, MasterBus
@@ -51,6 +51,14 @@ def _ascii_audio_paths(data: bytes) -> List[Tuple[int, str]]:
         if _looks_like_audio_path(s):
             found.append((m.start(), s))
     return found
+
+
+def _is_foreign_absolute(raw: str) -> bool:
+    """True for a Windows drive-letter or UNC path seen from a non-Windows host."""
+    text = raw.strip()
+    if len(text) >= 3 and text[1] == ":" and text[0].isalpha() and text[2] in "\\/":
+        return True
+    return text.startswith("\\\\")
 
 
 def _looks_like_audio_path(s: str) -> bool:
@@ -139,7 +147,13 @@ def _resolve_clip_path(
     p = Path(raw)
     if p.is_absolute() and p.exists():
         return p
-    name = p.name
+
+    # "C:\\audio\\loop.wav" is absolute on Windows but looks like a plain
+    # relative name to pathlib on POSIX, so joining it to the project directory
+    # produced nonsense like "/home/me/project/C:\audio\loop.wav". Take the
+    # basename from it and treat the original location as unavailable.
+    foreign = _is_foreign_absolute(raw)
+    name = PureWindowsPath(raw).name if foreign else p.name
     for root in media_roots:
         cand = root / name
         if cand.exists():
@@ -155,7 +169,7 @@ def _resolve_clip_path(
         return here
     # Keep a project-relative path even when the media file is missing so
     # sanitize_rpp_file_token does not resolve a bare basename against CWD.
-    if p.is_absolute():
+    if p.is_absolute() and not foreign:
         return p
     return project_file.parent / name
 
@@ -239,6 +253,7 @@ def parse_acid_project(
 
     tracks: List[AcidTrack] = []
     one_shots: List[str] = []
+    trimmed_away: List[str] = []
     if wave64_timeline is not None:
         meter_den = wave64_timeline.time_sig_den or 4
         tick_seconds = seconds_per_tick(tempo, wave64_timeline.ppq, meter_den)
@@ -253,16 +268,31 @@ def parse_acid_project(
             playrate = _source_playrate(tempo, source_loop)
             if source_loop is not None and source_loop.one_shot:
                 one_shots.append(resolved.name)
-            clips = [
-                AcidClip(
-                    path=resolved,
-                    position_sec=event.position_ticks * tick_seconds,
-                    length_sec=event.length_ticks * tick_seconds,
-                    name=name,
-                    playrate=playrate,
+            clips = []
+            for event in event_track.events:
+                position_ticks = event.position_ticks
+                length_ticks = event.length_ticks
+                trim_ticks = 0
+                if position_ticks < 0:
+                    # ACID lets an event sit left of bar 1. REAPER has no
+                    # negative item positions, so trim the hidden head into the
+                    # take's source offset and keep what is audible.
+                    trim_ticks = -position_ticks
+                    length_ticks += position_ticks
+                    position_ticks = 0
+                    if length_ticks <= 0:
+                        trimmed_away.append(name)
+                        continue
+                clips.append(
+                    AcidClip(
+                        path=resolved,
+                        position_sec=position_ticks * tick_seconds,
+                        length_sec=length_ticks * tick_seconds,
+                        name=name,
+                        playrate=playrate,
+                        source_trim_start_sec=trim_ticks * tick_seconds,
+                    )
                 )
-                for event in event_track.events
-            ]
             tracks.append(AcidTrack(name=name, clips=clips))
     else:
         # Fallback for uncatalogued variants: one neutral clip per media reference.
@@ -306,6 +336,13 @@ def parse_acid_project(
             )
             if source_tempos
             else "No cached source loop tempo found; clip stretch left at 1.0."
+        )
+    if trimmed_away:
+        unique = _dedupe_preserve(trimmed_away)
+        notes.append(
+            "Dropped clips that lay entirely before the start of the timeline: "
+            + "; ".join(unique[:8])
+            + ("…" if len(unique) > 8 else "")
         )
     if one_shots:
         unique = _dedupe_preserve(one_shots)

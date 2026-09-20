@@ -1,5 +1,3 @@
-from __future__ import annotations
-
 """
 In-memory representation of a project after parsing.
 
@@ -7,9 +5,11 @@ These dataclasses are intentionally boring: plain fields, no behavior, so both
 the CLI and GUI can share them without dragging in I/O or UI dependencies.
 """
 
+from __future__ import annotations
+
 from dataclasses import dataclass, field
 from pathlib import Path
-from typing import List, Optional, Tuple
+from typing import List, Optional
 
 # Plausible bounds for a clip stretch factor. A derived playrate outside this
 # range means a decode went wrong, so it is reset to 1.0 instead of exported.
