@@ -24,8 +24,54 @@ from .model import (
     FxSlot,
     MasterBus,
 )
+from .binary.meter import LEGAL_DENOMINATORS, MAX_NUMERATOR
 from .rpp_format import format_rpp_float
 from .security import sanitize_rpp_file_token
+
+_NOTES_MAX_LINES = 64
+_NOTES_MAX_LINE_CHARS = 400
+_NAME_MAX_CHARS = 128
+
+
+def _safe_text(value: str, limit: int) -> str:
+    """Strip control characters and cap length for any text we put in the RPP."""
+    cleaned = "".join(ch for ch in value if ch >= " " and ch != "\x7f")
+    return cleaned.replace("\t", " ").strip()[:limit]
+
+
+def _notes_element(project: AcidProject) -> Element | None:
+    """
+    Build the project ``NOTES`` block.
+
+    The parser produces real diagnostics -- missing media, decoded tempo, which
+    sources were left unstretched -- that previously went nowhere at all. REAPER
+    shows this block in Project Settings, which is where someone checking a
+    conversion will look.
+
+    Lines are appended as plain strings, not token lists, so the ``rpp`` writer
+    leaves the leading pipe unquoted the way REAPER writes it.
+    """
+    lines = []
+    for note in project.notes[:_NOTES_MAX_LINES]:
+        cleaned = _safe_text(note, _NOTES_MAX_LINE_CHARS)
+        if cleaned:
+            lines.append("|" + cleaned)
+    if not lines:
+        return None
+    element = Element("NOTES", ("0", "2"))
+    element.children.extend(lines)
+    return element
+
+
+def _project_time_signature(project: AcidProject) -> tuple[int, int]:
+    """Clamp the meter to something REAPER will accept, whatever the decode did."""
+    num = project.time_sig_num
+    den = project.time_sig_den
+    if not isinstance(num, int) or not 1 <= num <= MAX_NUMERATOR:
+        return (4, 4)
+    if not isinstance(den, int) or den not in LEGAL_DENOMINATORS:
+        return (4, 4)
+    return (num, den)
 
 
 def _source_tag(path: Path) -> tuple:
@@ -162,6 +208,11 @@ def _regular_track_element(track: AcidTrack, track_index: int) -> Element:
 
         it = Element("ITEM", ())
         it.children.append(_line("POSITION", format_rpp_float(clip.position_sec)))
+        # Without a NAME, REAPER labels every item with its filename, which is
+        # unreadable when a project reuses one loop across a dozen tracks.
+        item_name = _safe_text(clip.name or clip.path.stem, _NAME_MAX_CHARS)
+        if item_name:
+            it.children.append(_line("NAME", item_name))
         # REAPER source in-point is SOFFS (SNAPOFFS is the item snap point).
         soffs = clip.source_trim_start_sec if clip.source_trim_start_sec else 0.0
         it.children.append(_line("SOFFS", format_rpp_float(soffs)))
@@ -205,18 +256,14 @@ def acid_project_to_rpp(project: AcidProject) -> Element:
     Track order is **master first**, then each :class:`AcidTrack` in order.
     """
     root = Element("REAPER_PROJECT", ("0.1", "6.0", "0"))
+    sig_num, sig_den = _project_time_signature(project)
     root.children.extend(
         [
             _line("RIPPLE", "0"),
             _line("GROUPOVERRIDE", "0", "0", "0"),
             _line("AUTOXFADE", "0"),
             _line("ENVLOCKMODE", "0"),
-            _line(
-                "TEMPO",
-                str(project.tempo_bpm),
-                str(project.time_sig_num),
-                str(project.time_sig_den),
-            ),
+            _line("TEMPO", format_rpp_float(project.tempo_bpm), str(sig_num), str(sig_den)),
             _line("PLAYRATE", "1", "0", "0.25", "4"),
             _line("SELECTION", "0", "0"),
             _line("SELECTION2", "0", "0"),
@@ -225,6 +272,9 @@ def acid_project_to_rpp(project: AcidProject) -> Element:
             _line("MASTERTRACKVIEW", "1", "0.6667", "0.5", "0.5", "0", "0", "0"),
         ]
     )
+    notes = _notes_element(project)
+    if notes is not None:
+        root.children.append(notes)
     if project.sample_rate:
         root.children.append(
             _line("SAMPLERATE", str(project.sample_rate), "0", "0"),

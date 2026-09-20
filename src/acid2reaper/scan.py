@@ -27,8 +27,10 @@ from pathlib import Path
 from typing import Iterable, List, Optional, Sequence, Tuple
 
 from .acid_routing import collect_plugin_and_bus_hints
+from .acid_timing import seconds_per_tick
+from .binary.meter import DEN_NUM
 from .binary.extract import extract_structured_fields
-from .binary.wave64 import extract_acid_wave64_timeline
+from .binary.wave64 import AcidSourceLoop, extract_acid_wave64_timeline
 from .containers import AUDIO_EXT
 from .model import PLAYRATE_MAX, PLAYRATE_MIN, AcidClip, AcidProject, AcidTrack, MasterBus
 from .string_scan import utf16le_ascii_runs
@@ -83,15 +85,24 @@ def _guess_sample_rate_hz(data: bytes) -> Optional[int]:
     return None
 
 
-def _source_playrate(project_tempo: float, source_tempo: Optional[float]) -> float:
+def _source_playrate(project_tempo: float, source_loop: Optional[AcidSourceLoop]) -> float:
     """
     Stretch factor that beat-maps a source loop onto the project tempo.
 
     ACID caches the source loop's own tempo per track, so a loop authored at
     139.56 BPM inside a 120 BPM project plays back at 120/139.56. Missing or
     implausible values leave the clip unstretched.
+
+    One-shots are never stretched: a hit or a stab has no tempo to map onto the
+    grid, and resampling it to the project tempo audibly retunes it. Only the
+    one-shot bit is acted on. The 0x04 "stretch" bit is not a usable positive
+    signal -- the ACID 3 fixture has flags == 0 yet ACID demonstrably beat-maps
+    that loop -- so its absence tells us nothing.
     """
-    if source_tempo is None or not math.isfinite(source_tempo) or source_tempo <= 0.0:
+    if source_loop is None or source_loop.one_shot:
+        return 1.0
+    source_tempo = source_loop.tempo_bpm
+    if not math.isfinite(source_tempo) or source_tempo <= 0.0:
         return 1.0
     if not math.isfinite(project_tempo) or project_tempo <= 0.0:
         return 1.0
@@ -153,6 +164,9 @@ def parse_acid_project(
     project_file: Path,
     raw: bytes,
     media_roots: Optional[Sequence[Path]] = None,
+    *,
+    meter_order: str = DEN_NUM,
+    time_sig_override: Optional[Tuple[int, int]] = None,
 ) -> AcidProject:
     """
     Parse ACID project bytes (classic .acd / .acd-bak, or inner file from ACD-ZIP).
@@ -211,7 +225,7 @@ def parse_acid_project(
         ):
             by_base[base] = (path_str, resolved)
 
-    wave64_timeline = extract_acid_wave64_timeline(raw)
+    wave64_timeline = extract_acid_wave64_timeline(raw, meter_order=meter_order)
     tempo = (
         wave64_timeline.tempo_bpm
         if wave64_timeline is not None
@@ -224,8 +238,10 @@ def parse_acid_project(
     )
 
     tracks: List[AcidTrack] = []
+    one_shots: List[str] = []
     if wave64_timeline is not None:
-        seconds_per_tick = 60.0 / (tempo * wave64_timeline.ppq)
+        meter_den = wave64_timeline.time_sig_den or 4
+        tick_seconds = seconds_per_tick(tempo, wave64_timeline.ppq, meter_den)
         fallback_media = next(iter(by_base.values()), (None, project_file.parent / "missing.wav"))[1]
         for idx, event_track in enumerate(wave64_timeline.tracks):
             if event_track.media_path:
@@ -234,14 +250,14 @@ def parse_acid_project(
                 resolved = fallback_media
             name = resolved.stem or f"Track {idx + 1}"
             source_loop = event_track.source_loop
-            playrate = _source_playrate(
-                tempo, source_loop.tempo_bpm if source_loop is not None else None
-            )
+            playrate = _source_playrate(tempo, source_loop)
+            if source_loop is not None and source_loop.one_shot:
+                one_shots.append(resolved.name)
             clips = [
                 AcidClip(
                     path=resolved,
-                    position_sec=event.position_ticks * seconds_per_tick,
-                    length_sec=event.length_ticks * seconds_per_tick,
+                    position_sec=event.position_ticks * tick_seconds,
+                    length_sec=event.length_ticks * tick_seconds,
                     name=name,
                     playrate=playrate,
                 )
@@ -263,6 +279,13 @@ def parse_acid_project(
         }
     )
 
+    sig_num, sig_den = 4, 4
+    if wave64_timeline is not None and wave64_timeline.time_sig_num and wave64_timeline.time_sig_den:
+        sig_num = wave64_timeline.time_sig_num
+        sig_den = wave64_timeline.time_sig_den
+    if time_sig_override is not None:
+        sig_num, sig_den = time_sig_override
+
     notes: List[str] = [
         f"Format family: {fp.family_id}"
         + (f" (ACID Pro ~{fp.acid_pro_major_guess})" if fp.acid_pro_major_guess else ""),
@@ -282,21 +305,21 @@ def parse_acid_project(
             if source_tempos
             else "No cached source loop tempo found; clip stretch left at 1.0."
         )
+    if one_shots:
+        unique = _dedupe_preserve(one_shots)
+        notes.append(
+            "One-shot sources left unstretched (ACID acid-chunk flag 0x01): "
+            + "; ".join(unique[:8])
+            + ("…" if len(unique) > 8 else "")
+        )
+    notes.append(f"Project tempo: {tempo:g} BPM; time signature {sig_num}/{sig_den}.")
     notes.append("Verify: tempo, clip positions, stretch, pitch, envelopes, and FX.")
 
     proj = AcidProject(
         source_path=project_file,
         tempo_bpm=tempo,
-        time_sig_num=(
-            wave64_timeline.time_sig_num
-            if wave64_timeline is not None and wave64_timeline.time_sig_num
-            else 4
-        ),
-        time_sig_den=(
-            wave64_timeline.time_sig_den
-            if wave64_timeline is not None and wave64_timeline.time_sig_den
-            else 4
-        ),
+        time_sig_num=sig_num,
+        time_sig_den=sig_den,
         sample_rate=sr,
         master=MasterBus(),
         tracks=tracks,
@@ -319,12 +342,11 @@ def parse_acid_project(
         proj.notes.append(
             "No audio file references were found; try opening the project in ACID and re-saving."
         )
-    missing = [
-        str(clip.path)
-        for track in tracks
-        for clip in track.clips
-        if not clip.path.exists()
-    ]
+    # One entry per file, not per clip: a loop used fifteen times was listed
+    # fifteen times and swamped the note.
+    missing = _dedupe_preserve(
+        [str(clip.path) for track in tracks for clip in track.clips if not clip.path.exists()]
+    )
     if missing:
         proj.notes.append(
             "WARNING: media not found on disk (FILE paths are still project-relative; "

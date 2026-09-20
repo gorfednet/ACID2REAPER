@@ -1,12 +1,14 @@
 from __future__ import annotations
 
 import re
+import struct
 from pathlib import Path
 
 import pytest
 
+from acid2reaper.binary.acid_chunk import FLAG_ONE_SHOT
 from acid2reaper.cli import convert
-from fixturelib.offsets import SOURCE_ACID_LEAF_OFFSET
+from fixturelib.offsets import SOURCE_ACID_LEAF_OFFSET, SOURCE_FLAGS_OFFSET
 from rpp import loads
 
 
@@ -206,3 +208,72 @@ def test_acd_event_length_wins_over_colocated_wav_duration(tmp_path: Path) -> No
     length = float(m.group(1))
     assert length == pytest.approx(2.0)
     assert abs(length - expected) > 0.05
+
+
+def test_notes_block_is_emitted_and_round_trips(tmp_path: Path) -> None:
+    """Diagnostics the parser already computed now reach the project file."""
+    out = tmp_path / "notes.rpp"
+    convert(FIXTURES / "DrumRollUpDemo.acd", out)
+    text = out.read_text(encoding="utf-8")
+
+    assert "<NOTES" in text
+    assert "|Project tempo: 120 BPM; time signature 4/4." in text
+    # Plain-string children keep the leading pipe unquoted, as REAPER writes it.
+    assert '"|Project tempo' not in text
+    assert loads(text).tag == "REAPER_PROJECT"
+
+
+def test_missing_media_warning_lists_each_file_once(tmp_path: Path) -> None:
+    """A loop used fifteen times must not be reported fifteen times."""
+    out = tmp_path / "missing.rpp"
+    convert(FIXTURES / "DrumRollUpDemo.acd", out)
+    warning = next(
+        line for line in out.read_text(encoding="utf-8").splitlines() if "media not found" in line
+    )
+    assert warning.count("Break Pattern c.WAV") == 1
+
+
+def test_items_carry_a_name(tmp_path: Path) -> None:
+    out = tmp_path / "named.rpp"
+    convert(FIXTURES / "DrumRollUpDemo.acd", out)
+    text = out.read_text(encoding="utf-8")
+    assert text.count('NAME "Break Pattern c"') == 16  # 15 items plus the track
+
+
+def test_tempo_is_formatted_like_every_other_number(tmp_path: Path) -> None:
+    """The tempo line used to use str(), printing '120.0' among '120's."""
+    out = tmp_path / "tempo.rpp"
+    convert(FIXTURES / "DrumRollUpDemo.acd", out)
+    assert "TEMPO 120 4 4" in out.read_text(encoding="utf-8")
+
+
+def test_one_shot_sources_are_not_stretched(tmp_path: Path) -> None:
+    """
+    A one-shot has no tempo to beat-map, so it must keep its natural rate.
+
+    Resampling a hit to the project tempo audibly retunes it. The converter used
+    to stretch every source that carried a plausible cached tempo, one-shots
+    included, because the acid-chunk flag word was never decoded.
+    """
+    raw = bytearray((FIXTURES / "DrumRollUpDemo.acd").read_bytes())
+    struct.pack_into("<I", raw, SOURCE_FLAGS_OFFSET, FLAG_ONE_SHOT)
+    acd = tmp_path / "one_shot.acd"
+    acd.write_bytes(bytes(raw))
+
+    out = tmp_path / "one_shot.rpp"
+    convert(acd, out)
+    text = out.read_text(encoding="utf-8")
+
+    assert _playrate_lines(text) == []
+    assert "One-shot sources left unstretched" in text
+    # Timing is unaffected: only the stretch factor changes.
+    assert text.count("<ITEM") == 15
+
+
+def test_loops_are_still_stretched(tmp_path: Path) -> None:
+    """The companion to the one-shot case: a plain loop keeps its PLAYRATE."""
+    out = tmp_path / "loop.rpp"
+    convert(FIXTURES / "DrumRollUpDemo.acd", out)
+    text = out.read_text(encoding="utf-8")
+    assert len(_playrate_lines(text)) == 15
+    assert "One-shot sources left unstretched" not in text
