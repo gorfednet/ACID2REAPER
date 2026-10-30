@@ -7,11 +7,11 @@ labels: enhancement
 
 ## Problem / use case
 
-<!-- What workflow would this improve? -->
+<!-- Which workflow would this improve? -->
 
 ## Proposed solution
 
-<!-- Optional: how you imagine it working -->
+<!-- Optional: how you'd like it to work -->
 
 ## Alternatives considered
 

@@ -1,13 +1,13 @@
 # Contributing to ACID2Reaper
 
-Thank you for your interest in improving **ACID2Reaper** (currently in beta, 0.2.x).
+ACID2Reaper is in beta (0.2.x), and contributions are welcome.
 
 ## Ground rules
 
 - Follow the [Code of Conduct](CODE_OF_CONDUCT.md).
-- Prefer small, focused pull requests with a clear description of **what** and **why**.
-- Run tests locally: `pytest` (with `pip install ".[dev]"`).
-- Run the linter: `ruff check src tests scripts`.
+- Keep pull requests small and focused, and describe **what** changed and **why**.
+- Run the tests locally with `pytest` (after `pip install ".[dev]"`).
+- Run the linter with `ruff check src tests scripts`.
 
 ## Tests
 
@@ -18,8 +18,8 @@ pytest
 ruff check src tests scripts
 ```
 
-Three suites are opt-in, because they need something this repository does not
-ship, and are skipped without it:
+Three suites are opt-in. Each needs something this repository doesn't
+ship, and each is skipped without it:
 
 | Suite | Enable with | Needs |
 | --- | --- | --- |
@@ -27,37 +27,36 @@ ship, and are skipped without it:
 | REAPER oracle | `ACID2REAPER_REAPER_ORACLE=1` | A local REAPER install; attended, as an unlicensed REAPER shows a nag dialog |
 | Network harvesting | `ACID2REAPER_ALLOW_NETWORK=1` | Internet access |
 
-If a change alters converter output on purpose, review the diff and regenerate
+If a change alters converter output on purpose, read the diff and regenerate
 the golden projects:
 
 ```bash
 python scripts/update_goldens.py
 ```
 
-CI runs `python scripts/update_goldens.py --check`, so an unreviewed golden
-cannot drift in.
+CI runs `python scripts/update_goldens.py --check`, so a golden project can't change without a reviewed diff.
 
 ### Contributing format knowledge
 
-The most valuable contribution is a real `.acd` file that exercises something
-the current corpus does not — a genuine x/8 project above all, since the
-quarter-note tempo assumption in `acid_timing.seconds_per_tick` cannot be
+The most useful contribution is a real `.acd` file that covers something the
+current corpus doesn't. A genuine x/8 project is the first need, because the
+quarter-note tempo assumption in `acid_timing.seconds_per_tick` can't be
 settled without one. Please attach it to an issue.
 
-If you cannot share the file itself, `scripts/build_corpus_manifest.py` reduces
-a folder of projects to structural fingerprints — no audio, no file names, no
-project bytes — which is enough to extend coverage.
+If you can't share the file itself, `scripts/build_corpus_manifest.py` reduces
+a folder of projects to structural fingerprints (no audio, no file names, no
+project bytes), which is enough to extend coverage.
 
 ## Changelog (required for user-visible changes)
 
 This project uses [Keep a Changelog](https://keepachangelog.com/) in [CHANGELOG.md](CHANGELOG.md).
 
-- For any change that affects **users** (features, fixes, security, packaging), add a **`[Unreleased]`** note or a new `## [x.y.z]` section when preparing a release.
-- Release builds run `python scripts/verify_changelog.py`; the current `pyproject.toml` **version** must have a matching `## [x.y.z]` heading in `CHANGELOG.md`.
+- Any change that affects **users** (features, fixes, security, packaging) needs an **`[Unreleased]`** note, or a new `## [x.y.z]` section when you prepare a release.
+- Release builds run `python scripts/verify_changelog.py`. The `pyproject.toml` **version** must have a matching `## [x.y.z]` heading in `CHANGELOG.md`.
 
 ## Releases (maintainers)
 
-Git tags for GitHub should use a **`v` prefix** and semver; use **pre-release** tag names (e.g. `v0.2.0-beta.1`) when the build is not meant for production. See [RELEASING.md](RELEASING.md).
+Git tags for GitHub use a **`v` prefix** and semver. Use a **pre-release** tag name (for example `v0.2.0-beta.1`) when the build isn't meant for production. See [RELEASING.md](RELEASING.md).
 
 ## Development setup
 
@@ -71,6 +70,6 @@ pytest
 
 ## Pull requests
 
-- Link related issues when applicable.
+- Link related issues.
 - Update **CHANGELOG.md** for user-facing changes (see above).
-- Do not commit secrets, large binaries, or `dist/` / `build/` output.
+- Don't commit secrets, large binaries, or `dist/` or `build/` output.

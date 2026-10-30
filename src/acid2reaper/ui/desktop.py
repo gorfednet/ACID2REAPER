@@ -69,9 +69,9 @@ def run_app() -> int:
     ttk.Label(
         outer,
         text=(
-            f"First public beta — {__version_label__}. "
-            "Convert Sonic Foundry / Sony / MAGIX ACID projects to Cockos REAPER (.rpp). "
-            "All processing stays on this computer (no network use)."
+            f"First public beta, {__version_label__}. "
+            "ACID2Reaper converts Sonic Foundry / Sony / MAGIX ACID projects to Cockos REAPER (.rpp). "
+            "It runs entirely on this computer and uses no network."
         ),
         wraplength=560,
     ).grid(row=1, column=0, sticky="w", pady=(0, 16))
@@ -104,7 +104,7 @@ def run_app() -> int:
 
     def pick_media_dir() -> None:
         chosen = filedialog.askdirectory(
-            title="Choose folder containing project audio",
+            title="Choose the folder with the project audio",
             mustexist=True,
         )
         if chosen:
@@ -161,7 +161,7 @@ def run_app() -> int:
     conversion_log.grid(row=0, column=0, sticky="nsew")
     conversion_log.insert(
         "1.0",
-        "Choose an .acd / .acd-zip / .acd-bak, set the output path if needed, then Convert.\n",
+        "Choose an .acd, .acd-zip or .acd-bak file, set the output path if you need to, then click Convert.\n",
     )
     conversion_log.configure(state="disabled")
 
@@ -179,7 +179,7 @@ def run_app() -> int:
         destination = output_path_var.get().strip()
         media_dir = media_dir_var.get().strip()
         if not source:
-            messagebox.showwarning("Missing file", "Please choose an ACID project file.")
+            messagebox.showwarning("Missing file", "Choose an ACID project file first.")
             return
         status_label.configure(text="Status: Converting…")
         main_window.update_idletasks()
@@ -189,7 +189,7 @@ def run_app() -> int:
                 Path(destination) if destination else None,
                 extra_media_dirs=[Path(media_dir)] if media_dir else None,
             )
-            status_label.configure(text="Status: Finished — output saved.")
+            status_label.configure(text="Status: Finished. Output saved.")
             append_conversion_log(f"Saved: {written}")
             exit_code = 0
         except Acid2ReaperError as exc:
