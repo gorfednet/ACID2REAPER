@@ -8,6 +8,12 @@ and this project adheres to [Semantic Versioning](https://semver.org/spec/v2.0.0
 Release builds run `python scripts/verify_changelog.py` so every published version
 must have a matching section below.
 
+## [Unreleased]
+
+### Changed
+
+- Reworded the README, the command-line help, the graphical window's labels and messages, and the issue templates. No behaviour or converter output changes.
+
 ## [0.2.0] - 2026-09-20
 
 Conversion correctness release. Running the converter over 245 real ACID projects

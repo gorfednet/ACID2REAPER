@@ -29,8 +29,8 @@ def _build_parser() -> argparse.ArgumentParser:
     p = argparse.ArgumentParser(
         prog="acid2reaper",
         description=(
-            "Convert ACID project files (.acd, .acd-bak, .acd-zip) to Cockos REAPER (.rpp). "
-            "Parsing is heuristic for proprietary formats—always verify in REAPER."
+            "ACID2Reaper converts ACID project files (.acd, .acd-bak, .acd-zip) to Cockos REAPER (.rpp). "
+            "It reads proprietary formats heuristically, so check the result in REAPER."
         ),
         formatter_class=argparse.RawDescriptionHelpFormatter,
         epilog=(
@@ -60,7 +60,7 @@ def _build_parser() -> argparse.ArgumentParser:
     p.add_argument(
         "--gui",
         action="store_true",
-        help="Open the graphical window (Tkinter) instead of running a one-shot conversion.",
+        help="Open the graphical window (Tkinter) instead of converting one file.",
     )
     p.add_argument(
         "input",
@@ -72,7 +72,7 @@ def _build_parser() -> argparse.ArgumentParser:
         "output",
         nargs="?",
         type=Path,
-        help="Output .rpp path (default: same base name as input)",
+        help="Output .rpp path (default: the input's name with .rpp)",
     )
     p.add_argument(
         "--media-dir",
@@ -87,7 +87,7 @@ def _build_parser() -> argparse.ArgumentParser:
         choices=[DEN_NUM, NUM_DEN],
         default=DEN_NUM,
         help=(
-            "Slot order for ACID's raw time-signature pair. Only matters when "
+            "Slot order for ACID's raw time-signature pair. It matters only when "
             "both halves are powers of two (4/4, 4/8); 3/4, 5/4, 6/8 and 7/8 "
             "resolve themselves. Default: %(default)s."
         ),
@@ -96,7 +96,7 @@ def _build_parser() -> argparse.ArgumentParser:
         "--time-sig",
         metavar="NUM/DEN",
         default=None,
-        help="Override the decoded time signature entirely, e.g. --time-sig 6/8.",
+        help="Replace the decoded time signature, for example --time-sig 6/8.",
     )
     return p
 
@@ -176,7 +176,7 @@ def main(argv: Optional[list[str]] = None) -> int:
             from .ui.desktop import run_app
         except ImportError as exc:
             print(
-                "acid2reaper: Tkinter is not available (install python3-tk or use CLI without --gui).",
+                "acid2reaper: Tkinter is not available. Install python3-tk, or run without --gui.",
                 file=sys.stderr,
             )
             log.debug("GUI import failed", exc_info=exc)

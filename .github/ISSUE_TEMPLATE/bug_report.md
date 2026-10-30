@@ -1,6 +1,6 @@
 ---
 name: Bug report
-about: Report something that does not work as expected
+about: Report something that doesn't work as expected
 title: "[Bug] "
 labels: bug
 ---
@@ -11,23 +11,23 @@ Output of `acid2reaper --version`:
 
 ## Platform
 
-OS and version (e.g. macOS 15, Windows 11, Ubuntu 24.04):
+OS and version (for example macOS 15, Windows 11, Ubuntu 24.04):
 
 ## Steps to reproduce
 
 1.
 2.
 
-## Expected behavior
+## Expected behaviour
 
 
-## Actual behavior
+## Actual behaviour
 
 
 ## Sample file (optional)
 
-Describe the ACID project type (.acd / .acd-zip) and whether you can share a minimal repro (attach or link).
+Say which ACID project type it is (.acd or .acd-zip) and whether you can share a minimal repro (attach or link).
 
-For a project that converts with the **wrong tempo, meter, timing or media**,
+If a project converts with the **wrong tempo, meter, timing or media**,
 use the [Format sample](?template=format_sample.md) template instead, and
 include the output of `acid2reaper your-project.acd out.rpp -v`.
