@@ -92,7 +92,7 @@ python3 -m pip install \
   https://github.com/gorfednet/ACID2REAPER/releases/download/v0.2.0/acid2reaper-0.2.0-py3-none-any.whl
 ```
 
-On macOS, user installs often land in `~/Library/Python/3.9/bin` — put that directory on your `PATH`, or run `python3 -m acid2reaper`.
+On macOS, user installs often land in `~/Library/Python/3.9/bin`. Put that directory on your `PATH`, or run `python3 -m acid2reaper`.
 
 ### From source
 
