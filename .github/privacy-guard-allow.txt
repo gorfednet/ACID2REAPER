@@ -1,0 +1,2 @@
+# Public sites whose domain is also a private repository name.
+site gorfed.net
