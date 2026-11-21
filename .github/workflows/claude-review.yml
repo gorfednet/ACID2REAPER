@@ -20,7 +20,7 @@ permissions:
 
 jobs:
   review:
-    uses: gorfednet/.github/.github/workflows/claude-review.yml@main
+    uses: gorfednet/.github/.github/workflows/claude-review.yml@b149070debe0efe96684768b650e12c57077bbd7
     with:
       runs-on: ${{ vars.HEAVY_RUNS_ON }}
     secrets:
