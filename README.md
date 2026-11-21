@@ -3,7 +3,7 @@
 **Beta, version 0.2.** ACID2Reaper converts **Sonic Foundry / Sony / MAGIX ACID** projects (`.acd`, `.acd-bak`, `.acd-zip`) to **Cockos REAPER** `.rpp` projects.
 
 [![CI](https://github.com/gorfednet/ACID2REAPER/actions/workflows/ci.yml/badge.svg)](https://github.com/gorfednet/ACID2REAPER/actions/workflows/ci.yml)
-[![License: CC BY 4.0](https://img.shields.io/badge/License-CC%20BY%204.0-lightgrey.svg)](LICENSE)
+[![License: MIT](https://img.shields.io/badge/License-MIT-yellow.svg)](LICENSE)
 
 ## Features
 
@@ -179,7 +179,7 @@ See [SECURITY.md](SECURITY.md).
 
 ## License
 
-[Creative Commons Attribution 4.0 International (CC BY 4.0)](LICENSE). You may use, share and build on this work (including in modified form) if you **give appropriate credit**, link to the licence and **indicate changes** where applicable. See Section 3(a) of the licence text.
+[MIT](LICENSE).
 
 ## Trademarks
 

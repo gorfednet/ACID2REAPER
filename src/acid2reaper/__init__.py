@@ -1,6 +1,6 @@
 """ACID2Reaper — first public beta: convert ACID projects to Cockos REAPER (.rpp)."""
 
-# SPDX-License-Identifier: CC-BY-4.0
+# SPDX-License-Identifier: MIT
 
 from ._version import __version__, __version_label__
 

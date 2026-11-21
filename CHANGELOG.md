@@ -12,6 +12,7 @@ must have a matching section below.
 
 ### Changed
 
+- Licence changed from CC BY 4.0 to MIT.
 - Reworded the README, the command-line help, the graphical window's labels and messages, and the issue templates. No behaviour or converter output changes.
 
 ## [0.2.0] - 2026-09-20
